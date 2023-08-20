@@ -6,7 +6,8 @@ import shutil
 from clippy.controllers.apis.cohere_controller import Controller
 
 from clippy.crawler.states.states import Action, Task
-from clippy.stubs.templates.text.text_stubs import StubTemplates
+
+# from clippy.stubs.templates.text.text_stubs import StubTemplates
 
 
 class DataManager:

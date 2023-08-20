@@ -28,7 +28,9 @@ class TestCrawler(unittest.IsolatedAsyncioTestCase):
 
         await page.get_by_role("combobox", name="Search").fill("nail polish")
         await page.get_by_role("combobox", name="Search").press("Enter")
-        await page.wait_for_url("https://www.google.com/search?q=nail+polish**", timeout=10 * MS, wait_until="domcontentloaded")
+        await page.wait_for_url(
+            "https://www.google.com/search?q=nail+polish**", timeout=10 * MS, wait_until="domcontentloaded"
+        )
         await page.get_by_role("link", name="Nail Polish Amazon.com https://www.amazon.com").first.click()
         await page.wait_for_url("https://www.amazon.com/**", timeout=10 * MS, wait_until="domcontentloaded")
         await page.get_by_role("link", name="Gel Nail Polish").first.click()
@@ -38,4 +40,3 @@ class TestCrawler(unittest.IsolatedAsyncioTestCase):
         # await page.get_by_role("button", name="Submit").click()
         await page.get_by_role("button", name="Proceed to checkout").click()
         await page.wait_for_url("https://www.amazon.com/ap/**", timeout=10 * MS, wait_until="domcontentloaded")
-        # await crawler.pause()

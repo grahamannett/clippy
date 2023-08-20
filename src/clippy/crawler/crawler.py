@@ -1,69 +1,17 @@
 import asyncio
 import os
 import sys
+from pathlib import Path
 from typing import Awaitable, Coroutine, List
 
 # async types and functions
 from playwright.async_api import Browser, BrowserContext, CDPSession, Page
-from playwright.async_api import PlaywrightContextManager as PlaywrightContextManagerAsync
-from playwright.async_api import Request, Route
+from playwright.async_api import PlaywrightContextManager
 
-# sync types and functions
-from playwright.sync_api import Browser, BrowserContext, CDPSession
-from playwright.sync_api import Page as PageSync
-from playwright.sync_api import PlaywrightContextManager as PlaywrightContextManagerSync
-from playwright.sync_api import Request, Route
 
 from clippy.crawler.selectors import SelectorExtension
-
-
-async def ainput(string: str) -> str:
-    # can use aiconsole instead: await aioconsole.ainput(text)
-    await asyncio.to_thread(sys.stdout.write, f"{string} ")
-    return await asyncio.to_thread(sys.stdin.readline)
-
-
-async def end_record(page, crawler: "Crawler" = None):
-    DEBUG = os.environ.get("DEBUG", False)
-    if DEBUG:
-        return
-    # this is pretty similar to aioconsole but trying to see if i can do without aiconsole
-    line = await ainput("STARTING CAPTURE\n==press a key to exit==\n")
-    status = await page.evaluate("""() => {playwright.resume()}""")
-
-    if crawler:
-        await crawler.end()
-
-
-async def _dummy_handle_route(route: Route, request: Request):
-    # if i want to intercept requests so i can slow them down or something (for screenshots)
-    # that will happen here
-    await route.continue_()
-
-
-async def pause_crawler(page):
-    await page.pause()
-
-
-async def all_cmd_input(page):
-    user_input = None
-    await asyncio.sleep(3)
-
-    while user_input != "q":
-        # user_input = input("enter command\n")
-        user_input = await ainput("enter command==>\n")
-        user_input = user_input.rstrip("\n")
-        print("evaluating=>", user_input)
-
-        # user_input = await ainput("enter command\n")
-        if user_input == "q":
-            status = await page.evaluate("""() => {playwright.resume()}""")
-            return
-        try:
-            await eval(user_input)
-        except Exception as e:
-            print("error evaluating command", e)
-            return
+from clippy import constants
+from clippy.crawler.helpers import ainput, end_record, pause_crawler, all_cmd_input
 
 
 class Crawler:
@@ -77,7 +25,7 @@ class Crawler:
         self,
         start_page: str = None,
         key_exit: bool = True,
-        preload_injection_script: str = "./clippy/crawler/inject/preload.js",
+        preload_injection_script: str = constants.default_preload_injection_script,
         is_async: bool = True,
         headless: bool = None,
     ):
@@ -131,13 +79,8 @@ class Crawler:
         self.add_async_task(self.pause())
 
     async def init_without_ctx_manager(self):
-        self.ctx_manager = PlaywrightContextManagerAsync()
+        self.ctx_manager = PlaywrightContextManager()
         self.pw = await self.ctx_manager.start()
-        return self
-
-    def init_without_ctx_manager_sync(self):
-        self.ctx_manager = PlaywrightContextManagerSync()
-        self.pw = self.ctx_manager.start()
         return self
 
     def _extra_background_tasks(self):
@@ -219,41 +162,3 @@ class Crawler:
                 self._tracing_started = True
             else:
                 await ctx.tracing.stop(path=f"{self._trace_dir}/trace.zip")
-
-
-class CrawlerSync(Crawler):
-    def start(
-        self,
-        start_page: str = None,
-        key_exit: bool = False,
-        headless: bool = False,
-        inject_preload: bool = True,
-        use_instance_properties: bool = False,
-    ) -> PageSync:
-        if use_instance_properties:
-            start_page = self.start_page or start_page
-            key_exit = self.key_exit if (self.key_exit != None) else key_exit
-            headless = self.headless or headless
-            self.start_page = start_page
-            self.key_exit = key_exit
-            self.headless = headless
-
-        self.is_async = False
-        self.init_without_ctx_manager_sync()
-        self.selectors = self.extend_selectors()
-        self.browser = self.pw.chromium.launch(headless=headless)
-        self.ctx = self.browser.new_context()
-        self.ctx.route("**/*", lambda route: route.continue_())
-
-        if inject_preload:
-            self.injection(ctx=self.ctx, script=self.preload_injection_script)
-
-        self.page = self.ctx.new_page()
-
-        if key_exit:
-            print("WARNING: key_exit is True, this likely does not work for sync")
-            self.add_async_task(end_record(self.page, crawler=self))
-
-        if start_page:
-            self.page.goto(start_page)
-        return self.page

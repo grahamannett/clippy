@@ -3,7 +3,21 @@ name = "clippy"
 version = "0.1.0"
 description = ""
 authors = [{ name = "graham", email = "graham.annett@gmail.com" }]
-dependencies = ["reflex>=0.2.4"]
+dependencies = [
+    "reflex>=0.2.4",
+    "openai[datalib,embeddings,wandb]>=0.27.8",
+    "cohere>=4.20.2",
+    "pytest-playwright>=0.4.2",
+    "Jinja2>=3.1.2",
+    "torch>=2.0.1",
+    "tinydb>=4.8.0",
+    "sqlalchemy-utils>=0.41.1",
+    "bs4>=0.0.1",
+    "playwright>=1.37.0",
+    "numpy>=1.25.2",
+    "readability-lxml>=0.8.1",
+    "beautifulsoup4>=4.12.2",
+]
 requires-python = ">=3.11"
 readme = "README.md"
 license = { text = "MIT" }

@@ -22,7 +22,7 @@ Template.__call__ = __call__
 
 class StubHelper:
     available_templates = {}
-    environment = Environment(loader=FileSystemLoader(environ.get("TEMPLATES_DIR", "clippy/stubs/templates/")))
+    environment = Environment(loader=FileSystemLoader(environ.get("TEMPLATES_DIR", "src/clippy/templates/")))
 
     def map(self, template: Template, options: List[Dict[str, str]], **kwargs) -> List[str]:
         return [template(**{**opt, **kwargs}) for opt in options]

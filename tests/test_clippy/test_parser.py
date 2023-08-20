@@ -24,7 +24,7 @@ class TestParser(unittest.TestCase):
             browser = p.chromium.launch(headless=False)
 
             context = browser.new_context()
-            context.add_init_script(path="clippy/crawler/inject/empty.js")
+            context.add_init_script(path="src/clippy/crawler/inject/empty.js")
 
             context.route("**/*", lambda route: route.continue_())
 
