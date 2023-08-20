@@ -1,0 +1,8 @@
+Objective: ${objective}
+Current URL: ${url}
+---
+Current Browser Content:
+${browser_content}
+---
+Previous actions:
+${previous_commands}

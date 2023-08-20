@@ -1,0 +1,21 @@
+[project]
+name = "clippy"
+version = "0.1.0"
+description = ""
+authors = [{ name = "graham", email = "graham.annett@gmail.com" }]
+dependencies = ["reflex>=0.2.4"]
+requires-python = ">=3.11"
+readme = "README.md"
+license = { text = "MIT" }
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[tool.pdm.scripts]
+server = { shell = "cd src/trajlab && reflex run" }
+
+[tool.pdm.dev-dependencies]
+test = [
+    "pytest>=7.4.0",
+]
