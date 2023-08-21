@@ -20,17 +20,19 @@ class Crawler:
 
     async_tasks = {}
     browser: Browser
+    ctx: BrowserContext
+    page: Page
+    cdp_client: CDPSession
 
     def __init__(
         self,
-        start_page: str = None,
-        key_exit: bool = True,
+        start_page: str = constants.default_start_page,
         preload_injection_script: str = constants.default_preload_injection_script,
         is_async: bool = True,
-        headless: bool = None,
+        headless: bool = False,
+        key_exit: bool = True,
     ):
         self.is_async = is_async
-        self.cdp_client: CDPSession = None
         self.headless = headless
         self.preload_injection_script = preload_injection_script
         self._started = False
@@ -94,27 +96,15 @@ class Crawler:
         headless: bool = False,
         inject_preload: bool = True,
         use_instance_properties: bool = False,
+        get_cdp_client: bool = True,
     ):
-        if use_instance_properties:
-            # this makes it so we can use context manager and pass in args on init rather than here
-            # could probably refactor part of this to be a classmethod instead
-            start_page = self.start_page or start_page
-            key_exit = self.key_exit if (self.key_exit != None) else key_exit
-            headless = self.headless or headless
-
-            # save them as well to the instance
-            self.start_page = start_page
-            self.key_exit = key_exit
-            self.headless = headless
-
         self.is_async = True
         # ideally will make all this possible to use with then normal context manager
         # i.e. something like `with playwright as pw: self.pw = pw``
         await self.init_without_ctx_manager()
         # Selectors must be registered before creating the page.
         selectors = await asyncio.gather(*self.extend_selectors())
-
-        self.browser = await self.pw.chromium.launch(headless=self.headless)
+        self.browser = await self.pw.chromium.launch(headless=headless)
         self.ctx = await self.browser.new_context()
 
         await self.ctx.route("**/*", lambda route: route.continue_())
@@ -125,17 +115,18 @@ class Crawler:
         self.page = await self.ctx.new_page()
 
         if key_exit:
-            self.add_async_task(end_record(self.page, crawler=self))
+            self.add_async_task(end_record(self.page, callback=self._end_async))
 
         if start_page:
             await self.page.goto(start_page)
 
-        return self.page
+        if get_cdp_client:
+            self.cdp_client = await self.get_cdp_client()
 
-    def get_cdp_client(self) -> Awaitable[CDPSession] | CDPSession:
-        if self.cdp_client is None:
-            self.cdp_client = self.page.context.new_cdp_session(self.page)
-        return self.cdp_client
+        # return self.page
+
+    async def get_cdp_client(self) -> Awaitable[CDPSession] | CDPSession:
+        return await self.page.context.new_cdp_session(self.page)
 
     def get_tree(self, cdp_snapshot_kwargs: dict, cdp_client: CDPSession = None) -> Awaitable[dict] | dict:
         cdp_client = cdp_client or self.cdp_client
@@ -162,3 +153,16 @@ class Crawler:
                 self._tracing_started = True
             else:
                 await ctx.tracing.stop(path=f"{self._trace_dir}/trace.zip")
+
+    def _check_if_use(self, use_instance_properties: bool, **kwargs):
+        if use_instance_properties:
+            # this makes it so we can use context manager and pass in args on init rather than here
+            # could probably refactor part of this to be a classmethod instead
+            start_page = self.start_page or start_page
+            key_exit = self.key_exit if (self.key_exit != None) else key_exit
+            headless = self.headless or headless
+
+            # save them as well to the instance
+            self.start_page = start_page
+            self.key_exit = key_exit
+            self.headless = headless

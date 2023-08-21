@@ -11,7 +11,7 @@ async def ainput(string: str) -> str:
     return await asyncio.to_thread(sys.stdin.readline)
 
 
-async def end_record(page, crawler=None):
+async def end_record(page, crawler=None, callback: callable = None):
     DEBUG = os.environ.get("DEBUG", False)
     if DEBUG:
         return
@@ -19,8 +19,10 @@ async def end_record(page, crawler=None):
     line = await ainput("STARTING CAPTURE\n==press a key to exit==\n")
     status = await page.evaluate("""() => {playwright.resume()}""")
 
-    if crawler:
-        await crawler.end()
+    # if crawler:
+    #     await crawler.end()
+    if callback:
+        await callback()
 
 
 async def _dummy_handle_route(route: Route, request: Request):

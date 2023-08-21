@@ -1,11 +1,18 @@
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List
-from clippy.crawler.executor import Executor
+
+
+from clippy.constants import default_start_page, default_objective
 
 
 class HandleUserFeedback:
     def __init__(
-        self, initial_prompt: str, default_feedback: str, error_prompt: str, response_callback: Callable, after_feedback: Callable = None
+        self,
+        initial_prompt: str,
+        default_feedback: str,
+        error_prompt: str,
+        response_callback: Callable,
+        after_feedback: Callable = None,
     ):
         self.initial_prompt = initial_prompt
         self.default_feedback = default_feedback
@@ -114,7 +121,6 @@ class PageState:
 
 @dataclass
 class ClippyState:
-    executor: Executor = None
     objective: str = None
 
     response: Response = None
@@ -134,8 +140,8 @@ class ClippyState:
 
 @dataclass
 class ClippyDefaults:
-    start_page: str = "https://www.google.com"
-    objective: str = "Enter an objective: "
+    start_page: str = default_start_page
+    objective: str = default_objective
 
     def __call__(self, inst):
         for key, val in self.__dict__.items():

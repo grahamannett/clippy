@@ -2,8 +2,8 @@ import time
 
 from playwright.sync_api import ConsoleMessage, Page
 
-from clippy.crawler.capture.base import MachineCapture
-from clippy.crawler.crawler import CrawlerSync
+from clippy.capture.base import MachineCapture
+from clippy.crawler.crawler_sync import CrawlerSync
 from clippy.crawler.parser.playwright_strings import _parse_segment
 from clippy.crawler.states import Action, Click, Enter, Input, Step, Task, Wheel
 
@@ -55,9 +55,13 @@ class MachineCaptureSync(MachineCapture):
         element_buffer = self.dom_parser.page_element_buffer
         ids_of_interest = self.dom_parser.ids_of_interest
 
-        locators = [self.dom_parser._get_from_location(element_buffer[i], page) for idx, i in enumerate(ids_of_interest)]
+        locators = [
+            self.dom_parser._get_from_location(element_buffer[i], page) for idx, i in enumerate(ids_of_interest)
+        ]
         elements_of_interest = elements_of_interest[:50]
-        scored_els = self.instructor.compare_all_page_elements(self.objective, page_elements=elements_of_interest, url=page.url)
+        scored_els = self.instructor.compare_all_page_elements(
+            self.objective, page_elements=elements_of_interest, url=page.url
+        )
         if len(scored_els) == 0:
             breakpoint()
 

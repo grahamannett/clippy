@@ -2,9 +2,9 @@ import asyncio
 import time
 from typing import Coroutine
 
-from playwright.async_api import ConsoleMessage, Frame, Page
+from playwright.async_api import ConsoleMessage, Frame, Page, PlaywrightContextManager, async_playwright
 
-from clippy.crawler.capture.base import Capture, MachineCapture
+from clippy.capture.base import Capture, MachineCapture
 from clippy.crawler.crawler import Crawler
 from clippy.crawler.parser.dom_snapshot import DOMSnapshotParser
 from clippy.crawler.parser.playwright_strings import _parse_segment
@@ -52,8 +52,9 @@ class CaptureAsync(Capture):
         self.async_tasks[co.__name__] = co
 
     def setup_llm_suggest(self):
-        self.instructor = Instructor()
-        self.dom_parser = DOMSnapshotParser(keep_device_ratio=False)
+        if self.use_llm:
+            self.instructor = Instructor()
+            self.dom_parser = DOMSnapshotParser(keep_device_ratio=False)
 
     async def domcontentloaded_hook(self, page: Page):
         print("\n==>PAGE-CHANGED...wait for screenshot", end="")
@@ -105,7 +106,10 @@ class CaptureAsync(Capture):
             return
 
         locators = await asyncio.gather(
-            *[self.dom_parser._get_from_location_async(element_buffer[i], page) for idx, i in enumerate(ids_of_interest)]
+            *[
+                self.dom_parser._get_from_location_async(element_buffer[i], page)
+                for idx, i in enumerate(ids_of_interest)
+            ]
         )
 
         # TODO: shorten it for time being
@@ -119,6 +123,16 @@ class CaptureAsync(Capture):
 
         return await self.instructor.highlight_from_scored_async(scored_elements, locators=locators, page=page)
 
+    def _setup_page_hooks(self, page: Page):
+        # watch for console injections + page changes
+        page.on("console", self.console_hook)
+        page.on("domcontentloaded", self.domcontentloaded_hook)
+
+    async def with_crawler(self, crawler: Crawler, start_page: str = None):
+        self._setup_page_hooks(page=crawler.page)
+        await crawler.page.goto(start_page)
+        await self.page.pause()
+
 
 class HumanCaptureAsync(CaptureAsync):
     def __init__(self, *args, **kwargs) -> None:
@@ -126,25 +140,19 @@ class HumanCaptureAsync(CaptureAsync):
         self.action_idx = 0
 
     async def human_start(self):
+        raise NotImplementedError("Migrate to Using CaptureAsync only")
         self.data_manager.capture_start()
-        self.setup_llm_suggest()
-        crawler = Crawler()
-        self.crawler = crawler
-        page = await crawler.start()
+        # self.setup_llm_suggest()
+        self.crawler = Crawler()
+        self.page = await self.crawler.start()
 
-        self._setup_page_hooks(page=page)
-        self.page = page
-        self.cdp_client = await self.crawler.cdp_client
+        self._setup_page_hooks(page=self.page)
+        self.cdp_client = await self.crawler.get_cdp_client()
         await self.page.goto(self.start_page)
 
         # this is where a human starts doing things
         await self.page.pause()
-        await crawler.end()
-
-    def _setup_page_hooks(self, page: Page):
-        # watch for console injections + page changes
-        page.on("console", self.console_hook)
-        page.on("domcontentloaded", self.domcontentloaded_hook)
+        await self.crawler.end()
 
     async def framenavigated_hook(self, frame: Frame):
         pass

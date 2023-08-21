@@ -14,7 +14,11 @@ class Capture:
     input_delay = 100
 
     def __init__(
-        self, objective: str, start_page: str = "https://google.com", data_manager: DataManager = None, use_llm: bool = False
+        self,
+        objective: str = None,
+        start_page: str = None,
+        data_manager: DataManager = None,
+        use_llm: bool = False,
     ) -> None:
         self.objective = objective
         self.start_page = start_page

@@ -5,7 +5,6 @@ import unittest
 from clippy.controllers.apis.cohere_controller import CohereController
 from clippy.crawler.crawler import Crawler
 
-from clippy.crawler.executor import Executor
 
 from clippy.constants import MILLI_SECOND as MS
 

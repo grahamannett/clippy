@@ -149,13 +149,17 @@ class Instructor:
         async def _a_fn():
             return [
                 ScoredNextAction(**opt)
-                for opt in await self.lm_controller.score_actions(str_template=StubTemplates.prompt, options=opts, state=state_str)
+                for opt in await self.lm_controller.score_actions(
+                    str_template=StubTemplates.prompt, options=opts, state=state_str
+                )
             ]
 
         def _fn():
             return [
                 ScoredNextAction(**opt)
-                for opt in self.lm_controller.score_actions_sync(str_template=StubTemplates.prompt, options=opts, state=state_str)
+                for opt in self.lm_controller.score_actions_sync(
+                    str_template=StubTemplates.prompt, options=opts, state=state_str
+                )
             ]
 
         fn = _a_fn if self.use_async else _fn
@@ -187,7 +191,9 @@ class Instructor:
         )
 
         options = [{"next_command": e} for e in page_elements]
-        scored_opts = await self.lm_controller.score_actions(str_template=StubTemplates.prompt, options=options, state=state_text)
+        scored_opts = await self.lm_controller.score_actions(
+            str_template=StubTemplates.prompt, options=options, state=state_text
+        )
         scored_opts = [ScoredNextAction(**opt) for opt in scored_opts]
 
         if return_sorted:
@@ -219,7 +225,9 @@ class Instructor:
         )
 
         options = [{"next_command": e} for e in page_elements]
-        scored_opts = self.lm_controller.score_actions_sync(str_template=StubTemplates.prompt, options=options, state=state_text)
+        scored_opts = self.lm_controller.score_actions_sync(
+            str_template=StubTemplates.prompt, options=options, state=state_text
+        )
         scored_opts = [ScoredNextAction(**opt) for opt in scored_opts]
 
         if return_sorted:
@@ -238,12 +246,19 @@ class Instructor:
             previous_commands="None",
         )
 
-        scored_opts = self.lm_controller.score_actions(str_template=StubTemplates.prompt, options=action_options, state=state_text)
+        scored_opts = self.lm_controller.score_actions(
+            str_template=StubTemplates.prompt, options=action_options, state=state_text
+        )
         scored_opts = sorted([ScoredNextAction(**opt) for opt in scored_opts], key=lambda x: x.score, reverse=True)
         return scored_opts
 
     def predict_action_target(
-        self, action: str, objective: str, page_state: PageState = None, url: str = None, page_elements: List[str] = None
+        self,
+        action: str,
+        objective: str,
+        page_state: PageState = None,
+        url: str = None,
+        page_elements: List[str] = None,
     ) -> List[ScoredActionTarget]:
         filtered_page_elements = list(filter_page_elements(action, page_state.page_elements))
         browser_content = "\n".join([f"- {el}" for el in filtered_page_elements])
@@ -260,7 +275,9 @@ class Instructor:
         options = [{"target": t} for t in filtered_page_elements]
 
         if len(options) > 1:
-            scored_opts = self.lm_controller.score_actions(str_template=target_template, options=options, state=state_text)
+            scored_opts = self.lm_controller.score_actions(
+                str_template=target_template, options=options, state=state_text
+            )
         else:
             scored_opts = [{"target": options[0]["target"], "score": 1.0}]
 
@@ -271,7 +288,9 @@ class Instructor:
         # if its a type command, then we need to ask for the value
 
         browser_content = "\n".join([f"- {el}" for el in page_state.page_elements])
-        state_text = StubTemplates.state(objective=objective, url=page_state.url, browser_content=browser_content, previous_commands="None")
+        state_text = StubTemplates.state(
+            objective=objective, url=page_state.url, browser_content=browser_content, previous_commands="None"
+        )
         next_command = " ".join(next_cmd) + "\nValue:"
 
         prompt_str = StubTemplates.prompt(state=state_text, next_command=next_command)
@@ -284,7 +303,9 @@ class Instructor:
 
         generated_txt = self.predict_target_cmd(objective=state.objective, next_cmd=cmd, page_state=state.page_state)
 
-        initial_prompt = f"The LM thinks the next command should be: {' '.join(cmd) + generated_txt}\nIs that correct? (y/n): "
+        initial_prompt = (
+            f"The LM thinks the next command should be: {' '.join(cmd) + generated_txt}\nIs that correct? (y/n): "
+        )
 
         def valid_response_cb(resp: str):
             pass
@@ -306,7 +327,10 @@ class Instructor:
             return
 
         locators = await asyncio.gather(
-            *[self.dom_parser._get_from_location_async(element_buffer[i], page) for idx, i in enumerate(ids_of_interest)]
+            *[
+                self.dom_parser._get_from_location_async(element_buffer[i], page)
+                for idx, i in enumerate(ids_of_interest)
+            ]
         )
 
         # TODO: shorten it for time being
@@ -360,7 +384,9 @@ class InstructorStepHandler:
         cmd = state.response.cmd
         action = cmd[0]
         page_elements = state.page_state.page_elements
-        scored_opts = self.parent.predict_action_target(action=action, objective=state.objective, page_state=state.page_state)
+        scored_opts = self.parent.predict_action_target(
+            action=action, objective=state.objective, page_state=state.page_state
+        )
 
         default_target = scored_opts[0].target.split(" ")[:2]
         printed_page_elements = "\n".join(["- " + el for el in page_elements])
@@ -402,32 +428,3 @@ class InstructorStepHandler:
             state.response.feedback_fn(state)
 
         return state
-
-
-if __name__ == "__main__":
-    import torch
-
-    data = "tests/fixtures/soap/llm-assist.pt"
-    data = torch.load(data)
-    pel = data["page_elements"]
-
-    pelb = data["page_element_buffer"]
-    pel_ids = data["page_elements_ids"]
-    url = data["url"]
-    objective = "buy soap"
-
-    url = url[:100]
-    pel = pel[:20]
-
-    instructor = Instructor()
-    instructor_async = Instructor(use_async=True)
-    import asyncio
-    import time
-
-    state = PageState(url=url, page_elements=pel)
-
-    # async def main():
-    #     out = await instructor.compare_all_page_elements(page_state=pel, objective=objective, url=url)
-    #     breakpoint()
-
-    # asyncio.run(main())
