@@ -7,7 +7,7 @@ from playwright.async_api import Locator, Page
 from playwright.sync_api import Locator as LocatorSync
 
 from clippy.controllers.apis.cohere_controller import CohereController
-from clippy.crawler.executor import filter_page_elements
+
 from clippy.crawler.parser.dom_snapshot import DOMSnapshotParser
 from clippy.data_states import ClippyState, ControllerResponse, HandleUserFeedback, PageState
 
@@ -428,3 +428,47 @@ class InstructorStepHandler:
             state.response.feedback_fn(state)
 
         return state
+
+
+# async def _get_elements_of_interest(self, cdp_client, page: Page, timeout=2):
+#     start_time = time.time()
+#     elements_of_interest = []
+#     logger.info("parsing tree...", end="")
+
+#     while ((time.time() - start_time) < timeout) and (len(elements_of_interest) == 0):
+#         tree = await self.crawler.get_tree(self.dom_parser.cdp_snapshot_kwargs)
+#         elements_of_interest = await self.dom_parser.crawl_async(tree=tree, page=page)
+#     return elements_of_interest
+
+
+# # @timer
+# async def llm_assist_hook(self, page: Page):
+#     if not self.use_llm:
+#         return
+
+#     if (elements_of_interest := await self._get_elements_of_interest(self.cdp_client, page)) == []:
+#         logger.info("tried to crawl but didnt work...")
+#         return
+
+#     # elements_of_interest = await self.dom_parser.crawl_async(self.cdp_client, page)
+#     element_buffer = self.dom_parser.page_element_buffer
+#     ids_of_interest = self.dom_parser.ids_of_interest
+
+#     if not ids_of_interest:
+#         logger.info("no elements of interest, skipping...")
+#         return
+
+#     locators = await asyncio.gather(
+#         *[self.dom_parser._get_from_location_async(element_buffer[i], page) for idx, i in enumerate(ids_of_interest)]
+#     )
+
+#     # shorten it for time being
+#     elements_of_interest = elements_of_interest[:50]
+#     scored_elements = await self.instructor.compare_all_page_elements_async(
+#         self.objective, page_elements=elements_of_interest, url=page.url
+#     )
+
+#     if not scored_elements:
+#         breakpoint()
+
+#     return await self.instructor.highlight_from_scored_async(scored_elements, locators=locators, page=page)

@@ -2,7 +2,7 @@ import time
 
 from playwright.sync_api import ConsoleMessage, Page
 
-from clippy.capture.base import MachineCapture
+from clippy.capture.capture import MachineCapture
 from clippy.crawler.crawler_sync import CrawlerSync
 from clippy.crawler.parser.playwright_strings import _parse_segment
 from clippy.crawler.states import Action, Click, Enter, Input, Step, Task, Wheel

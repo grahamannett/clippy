@@ -4,10 +4,15 @@ import os
 
 from playwright.async_api import Request, Route
 
+import atexit
+
+from clippy.utils.async_tools import run_async_func, allow_async, _allow_nested_loop
+
 
 async def ainput(string: str) -> str:
     # can use aiconsole instead: await aioconsole.ainput(text)
     await asyncio.to_thread(sys.stdout.write, f"{string} ")
+    # print(f"{string}")
     return await asyncio.to_thread(sys.stdin.readline)
 
 

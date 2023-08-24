@@ -2,7 +2,7 @@ import unittest
 import torch
 from playwright.sync_api import sync_playwright, Locator, PlaywrightContextManager
 
-from clippy.crawler.crawler import SelectorExtension
+from clippy.crawler.crawler import Selector
 from clippy.crawler.parser.dom_snapshot import DOMSnapshotParser, _get_from_location
 
 data = torch.load("tests/fixtures/soap/llm-assist.pt")
@@ -18,9 +18,9 @@ url = data["url"]
 class TestParser(unittest.TestCase):
     def test_elements_to_locators(self):
         with sync_playwright() as p:
-            SelectorExtension.setup_tag_selectors(p)
-            # p.selectors.register("tag", SelectorExtension.tag_selector)
-            # p.selectors.register("pos", SelectorExtension.pos_selector)
+            Selector.register(p)
+            # p.selectors.register("tag", Selector.tag_selector)
+            # p.selectors.register("pos", Selector.pos_selector)
             browser = p.chromium.launch(headless=False)
 
             context = browser.new_context()

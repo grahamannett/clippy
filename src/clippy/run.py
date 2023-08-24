@@ -42,7 +42,7 @@ def get_args():
     return args
 
 
-def main():
+def run():
     check_startup()
 
     args = get_args()
@@ -58,5 +58,5 @@ def main():
 
 
 if __name__ == "__main__":
-    clippy = main()
+    clippy = run()
     asyncio.run(clippy.run_capture(use_llm=False))

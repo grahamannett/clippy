@@ -33,7 +33,7 @@ class CrawlerSync(Crawler):
         self.ctx.route("**/*", lambda route: route.continue_())
 
         if inject_preload:
-            self.injection(ctx=self.ctx, script=self.preload_injection_script)
+            self.injection(ctx=self.ctx)
 
         self.page = self.ctx.new_page()
 

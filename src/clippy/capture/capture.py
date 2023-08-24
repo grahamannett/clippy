@@ -5,9 +5,17 @@ from playwright.async_api import Page
 from clippy.crawler.parser.dom_snapshot import DOMSnapshotParser
 from clippy.crawler.parser.playwright_strings import _parse_segment
 from clippy.crawler.screenshot_matcher import ScreenshotMatcher
-from clippy.crawler.states import Action, Click, Enter, Input, Step, Task, Wheel
+
+# from clippy.states import actions
+# from clippy.states.states import Step, Task
+from clippy.states import Step, Task, actions, Action, Input
+
+# from clippy.states import Action, ActionTypes, Click, Enter, Input, Step, Task, Wheel
 from clippy.dm.data_manager import DataManager
 from clippy.instructor import Instructor
+
+
+
 
 
 class Capture:
@@ -28,22 +36,16 @@ class Capture:
         self.task: Task = Task(self.objective)
         self.ss_match = ScreenshotMatcher()
 
-        self._allow_end_record = True
         self.use_llm = use_llm
 
-    def _allow_nested_loop(self):
-        import nest_asyncio
-
-        nest_asyncio.apply()
-
     def _input(self, text: str):
-        # use this for mocking
+        # used for mocking input
         return input(text)
 
     def end_capture(self):
         self.data_manager.save(task=self.task)
 
-    def confirm_input(self, next_type: Action | Step, confirm: bool = True, **kwargs):
+    def confirm_input(self, next_type: actions.Action | Step, confirm: bool = True, **kwargs):
         if not confirm:
             return
         print(f"next {next_type.__class__.__name__} will be:\n{next_type}\n" + "=" * 10)
@@ -62,23 +64,23 @@ class MachineCapture(Capture):
         self._step_through_actions = True
         self._curr_step = None
 
-    def _exec_python_locator(self, action: Click, page: Page, **kwargs):
+    def _exec_python_locator(self, action: actions.Click, page: Page, **kwargs):
         return eval(f"page.{action.python_locator}")
         # return exec(f"page.{action.python_locator}")
 
     def execute_none(self, *args, **kwargs) -> None:
         pass
 
-    def execute_input(self, action: Input, page: Page, **kwargs) -> Awaitable[None] | None:
+    def execute_input(self, action: actions.Input, page: Page, **kwargs) -> Awaitable[None] | None:
         return page.keyboard.type(text=action.value, delay=self.input_delay)
 
-    def execute_wheel(self, action: Wheel, page: Page, increments: int = 250, **kwargs) -> Awaitable[None] | None:
+    def execute_wheel(self, action: actions.Wheel, page: Page, increm: int = 250, **kwargs) -> Awaitable[None] | None:
         # TODO: I dont think this works if there is peripheral scrolling.  NEED TO TEST
         page_x, page_y = page.viewport_size["width"], page.viewport_size["height"]
         final_X = action.deltaX
         final_Y = action.deltaY
 
-        num_scrolls, remainder = divmod(final_Y, increments)
+        num_scrolls, remainder = divmod(final_Y, increm)
         if num_scrolls < 0:
             scroll_dir = -1
         else:
@@ -86,18 +88,10 @@ class MachineCapture(Capture):
 
         delta_y = remainder
         for _ in range(abs(num_scrolls)):
-            delta_y += increments * scroll_dir
+            delta_y += increm * scroll_dir
         return page.mouse.wheel(delta_x=final_X, delta_y=delta_y)
 
         _wheels = []
-        # _wheels.append(w)
-        # for _ in range(abs(num_scrolls)):
-        #     w = page.mouse.wheel(delta_x=0, delta_y=increments * scroll_dir)
-        #     _wheels.append(w)
-
-        # w = page.mouse.wheel(delta_x=final_X, delta_y=remainder)
-        # _wheels.append(w)
-        # return _wheels
 
     def execute_press(self, action: Action, page: Page, **kwargs) -> Awaitable[None] | None:
         return page.keyboard.press(action.value, delay=self.input_delay)

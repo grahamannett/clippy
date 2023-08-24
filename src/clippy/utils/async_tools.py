@@ -14,18 +14,17 @@ def run_async_func(func: Coroutine):
 
 
 def allow_async(func):
-    if use_async:
-
-        @wraps(func)  # Makes sure that function is returned for e.g. func.__name__ etc.
-        async def run(*args, loop=None, executor=None, **kwargs):
-            if loop is None:
-                loop = asyncio.get_event_loop()  # Make event loop of nothing exists
-            pfunc = partial(func, *args, **kwargs)  # Return function with variables (event) filled in
-            return await loop.run_in_executor(executor, pfunc)
-
-        return run
-    else:
+    if not use_async:
         return func
+
+    @wraps(func)  # Makes sure that function is returned for e.g. func.__name__ etc.
+    async def run(*args, loop=None, executor=None, **kwargs):
+        if loop is None:
+            loop = asyncio.get_event_loop()  # Make event loop of nothing exists
+        pfunc = partial(func, *args, **kwargs)  # Return function with variables (event) filled in
+        return await loop.run_in_executor(executor, pfunc)
+
+    return run
 
 
 def from_async(func):
@@ -61,3 +60,9 @@ def timer(func: Callable):
             return result
 
         return wrapper
+
+
+def _allow_nested_loop(self):
+    import nest_asyncio
+
+    nest_asyncio.apply()

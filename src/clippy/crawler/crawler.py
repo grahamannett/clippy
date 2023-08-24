@@ -2,14 +2,16 @@ import asyncio
 import os
 import sys
 from pathlib import Path
-from typing import Awaitable, Coroutine, List
+from typing import Awaitable, Callable, Coroutine, List
+
+from loguru import logger
 
 # async types and functions
 from playwright.async_api import Browser, BrowserContext, CDPSession, Page
 from playwright.async_api import PlaywrightContextManager
 
 
-from clippy.crawler.selectors import SelectorExtension
+from clippy.crawler.selectors import Selector
 from clippy import constants
 from clippy.crawler.helpers import ainput, end_record, pause_crawler, all_cmd_input
 
@@ -24,19 +26,19 @@ class Crawler:
     page: Page
     cdp_client: CDPSession
 
+    # js scripts or evals
+    end_early_js: str = """() => {playwright.resume()}"""
+    preload_injection_script: str = constants.default_preload_injection_script
+
     def __init__(
         self,
-        start_page: str = constants.default_start_page,
-        preload_injection_script: str = constants.default_preload_injection_script,
         is_async: bool = True,
         headless: bool = False,
         key_exit: bool = True,
     ):
+        self._started = False
         self.is_async = is_async
         self.headless = headless
-        self.preload_injection_script = preload_injection_script
-        self._started = False
-        self.start_page = start_page
         self.key_exit = key_exit
 
     @staticmethod
@@ -59,18 +61,22 @@ class Crawler:
         await self._end_async()
 
     async def _end_async(self):
+        if self.cdp_client:
+            await self.cdp_client.detach()
+
+        await self.page.close()
         await self.browser.close()
         await self.ctx_manager.__aexit__()
 
     def _end_sync(self):
+        if self.cdp_client:
+            self.cdp_client.detach()
+        self.page.close()
         self.browser.close()
         self.ctx_manager.__exit__()
 
     def end(self) -> Awaitable[None] | None:
-        if self.is_async:
-            return self._end_async()
-
-        return self._end_sync()
+        return self._end_async() if self.is_async else self._end_sync()
 
     async def pause(self, page: Page = None):
         if page is None:
@@ -89,22 +95,14 @@ class Crawler:
         self.add_async_task(all_cmd_input(self.page))
         self.add_async_task(pause_crawler(self.page, self))
 
-    async def start(
-        self,
-        start_page: str = None,
-        key_exit: bool = True,
-        headless: bool = False,
-        inject_preload: bool = True,
-        use_instance_properties: bool = False,
-        get_cdp_client: bool = True,
-    ):
+    async def start(self, inject_preload: bool = True, key_exit: bool = None):
         self.is_async = True
         # ideally will make all this possible to use with then normal context manager
         # i.e. something like `with playwright as pw: self.pw = pw``
         await self.init_without_ctx_manager()
         # Selectors must be registered before creating the page.
         selectors = await asyncio.gather(*self.extend_selectors())
-        self.browser = await self.pw.chromium.launch(headless=headless)
+        self.browser = await self.pw.chromium.launch(headless=self.headless)
         self.ctx = await self.browser.new_context()
 
         await self.ctx.route("**/*", lambda route: route.continue_())
@@ -114,19 +112,15 @@ class Crawler:
 
         self.page = await self.ctx.new_page()
 
-        if key_exit:
-            self.add_async_task(end_record(self.page, callback=self._end_async))
+        # if key_exit or self.key_exit:
+        #     self.add_async_task(end_record(self.page, callback=self._end_async))
 
-        if start_page:
-            await self.page.goto(start_page)
+        self.cdp_client = await self.get_cdp_client()
 
-        if get_cdp_client:
-            self.cdp_client = await self.get_cdp_client()
+        return self.page
 
-        # return self.page
-
-    async def get_cdp_client(self) -> Awaitable[CDPSession] | CDPSession:
-        return await self.page.context.new_cdp_session(self.page)
+    def get_cdp_client(self) -> Awaitable[CDPSession] | CDPSession:
+        return self.page.context.new_cdp_session(self.page)
 
     def get_tree(self, cdp_snapshot_kwargs: dict, cdp_client: CDPSession = None) -> Awaitable[dict] | dict:
         cdp_client = cdp_client or self.cdp_client
@@ -136,25 +130,28 @@ class Crawler:
         )
 
     def extend_selectors(self):
-        return SelectorExtension.setup_tag_selectors(self.pw)
+        return Selector.register(self.pw)
 
     def injection(self, ctx: Browser | Page, script: str) -> Awaitable | None:
         return ctx.add_init_script(path=script)
 
-    def add_async_task(self, task: Coroutine):
-        coroutine = asyncio.create_task(task)
-        self.async_tasks[coroutine.get_name()] = coroutine
+    async def allow_end_early(self, end_early_info: str = "==press a key to exit=="):
+        if not self.key_exit:
+            return
 
-    async def _use_tracing(self, ctx: BrowserContext, use: bool = False):
-        self._tracing_started = None
-        if use:
-            if not self._tracing_started:
-                await ctx.tracing.start(screenshots=True, snapshots=True, sources=True)
-                self._tracing_started = True
-            else:
-                await ctx.tracing.stop(path=f"{self._trace_dir}/trace.zip")
+        # not sure why but what i was prev using is broke:
+        # asyncio.to_thread(sys.stdout.write, end_early_info)
+        print(end_early_info)
 
-    def _check_if_use(self, use_instance_properties: bool, **kwargs):
+        while line := await asyncio.to_thread(sys.stdin.readline):
+            return await self.page.evaluate(self.end_early_js)
+
+    async def add_background_task(self, fn: Awaitable):
+        task = asyncio.create_task(fn)
+        self.async_tasks[task.get_name()] = task
+        logger.info(f"added task {task.get_name()}")
+
+    def _check_if_instance_properties(self, use_instance_properties: bool, **kwargs):
         if use_instance_properties:
             # this makes it so we can use context manager and pass in args on init rather than here
             # could probably refactor part of this to be a classmethod instead

@@ -10,10 +10,21 @@ from clippy.crawler.states.states import Task
 from clippy.data_states import ClippyDefaults, ClippyState, PageState
 from clippy.dm.data_manager import DataManager
 from clippy.instructor import Instructor
+from clippy import constants
 
 
 def _device_ratio_check():
     return bool(strtobool(environ.get("KEEP_DEVICE_RATIO", "False")))
+
+
+def _check_exec_type(exec_type: str, task: str):
+    if (task == "capture") and (exec_type != "async"):
+        print("==>WARNING<==")
+        print("---you cannot capture task in sync mode due to needing to handle callbacks")
+        print("---manually changing exec_type to async")
+        print("==>WARNING END<==")
+        exec_type = "async"
+    return exec_type
 
 
 class ClippyHelper:
@@ -21,8 +32,8 @@ class ClippyHelper:
 
     def __init__(
         self,
-        objective: str = ClippyDefaults.objective,
-        start_page: str = ClippyDefaults.start_page,
+        objective: str = constants.default_objective,
+        start_page: str = constants.default_start_page,
         headless: bool = False,
         clear_step_states: bool = False,
     ):
@@ -44,7 +55,7 @@ class ClippyHelper:
         no_confirm = args.no_confirm
         use_llm = args.llm
 
-        exec_type = self._check_exec_type(args.exec_type, cmd)
+        exec_type = _check_exec_type(args.exec_type, cmd)
 
         funcs = {
             "sync": {
@@ -68,51 +79,18 @@ class ClippyHelper:
             case "capture":
                 self._check_objective()
 
-    def _check_exec_type(self, exec_type: str, task: str):
-        if (task == "capture") and (exec_type != "async"):
-            print("==>WARNING<==")
-            print("---you cannot capture task in sync mode due to needing to handle callbacks")
-            print("---manually changing exec_type to async")
-            print("==>WARNING END<==")
-            exec_type = "async"
-        return exec_type
-
     def _check_objective(self):
-        if self.objective == ClippyDefaults.objective:
+        if self.objective == constants.default_objective:
             print("no objective set, please enter objective")
             self.objective = self._get_input(self.objective)
 
     async def run_capture(self, use_llm: bool = False, **kwargs):
-        capture = CaptureAsync(objective=self.objective)
-        crawler = Crawler()
+        capture = CaptureAsync(objective=self.objective, data_manager=self.data_manager)
+        crawler = Crawler(headless=False)
 
-        await crawler.start(
-            key_exit=True,
-            headless=False,
-            get_cdp_client=True,
-        )
-
-        await capture.with_crawler(crawler, start_page=self.start_page)
-        # from playwright.async_api import async_playwright
-
-        # async with async_playwright() as pw:
-        #     browser = await pw.chromium.launch(headless=False)
-        #     ctx = await browser.new_context()
-        #     # await ctx.route("**/*", lambda route: route.continue_())
-        #     page = await ctx.new_page()
-        #     await page.goto(self.start_page)
-
-        #     await page.pause()
-        # capture = HumanCapture()
-        # await capture.start(start_page=self.start_page)
-        # capture = HumanCaptureAsync(
-        #     objective=self.objective,
-        #     data_manager=self.data_manager,
-        #     use_llm=use_llm,
-        #     start_page=self.start_page,
-        # )
-        # await capture.human_start()
-        # capture.end_capture()
+        await capture.start(crawler, start_page=self.start_page)
+        await crawler.end()
+        capture.end_capture()
 
     def run_replay(self, class_handler: MachineCaptureAsync | MachineCaptureSync):
         def _replay(use_llm: bool, no_confirm: bool, **kwargs):
@@ -123,11 +101,6 @@ class ClippyHelper:
             return capture.execute_task(task=task, no_confirm=no_confirm, **kwargs)
 
         return _replay
-
-    # async def run_assist(self, **kwargs):
-    #     self.start_agent()
-    #     while True:
-    #         self.run()
 
     def get_task_for_replay(self, tasks: List[Task]) -> Task:
         self.data_manager.load()
@@ -151,30 +124,6 @@ class ClippyHelper:
 
     def _get_input(self, string: str = None):
         return input(string)
-
-    # def reset(self) -> ClippyState:
-    #     executor = Executor(keep_device_ratio=self.keep_device_ratio, headless=self.headless)
-    #     self.state = ClippyState(executor=executor)
-    #     return self.state
-
-    # def start_agent(self):
-    #     state = self.reset()
-    #     defaults = ClippyDefaults()
-    #     state.executor.go_to_page(defaults.start_page)
-
-    #     if self.objective is None:
-    #         objective = self._get_input(defaults.objective)
-    #     else:
-    #         print(f"starting with objective: {self.objective}")
-    #         objective = self.objective
-
-    #     state.objective = objective
-    #     self.instructor = Instructor(objective)
-
-    #     # set initial loop states
-    #     state.pre_step = self.get_page_state
-    #     state.next_step = self.instructor.step_handler.first_step
-    #     state.post_step = self.instructor.step_handler.post_state
 
     def get_page_state(self, state: ClippyState) -> ClippyState:
         """

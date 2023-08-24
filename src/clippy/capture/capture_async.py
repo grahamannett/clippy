@@ -1,52 +1,71 @@
 import asyncio
 import time
+import sys
 from typing import Coroutine
 
-from playwright.async_api import ConsoleMessage, Frame, Page, PlaywrightContextManager, async_playwright
+from loguru import logger
+from playwright.async_api import ConsoleMessage, Frame, Page
 
-from clippy.capture.base import Capture, MachineCapture
+from clippy.capture.capture import Capture, MachineCapture
 from clippy.crawler.crawler import Crawler
 from clippy.crawler.parser.dom_snapshot import DOMSnapshotParser
 from clippy.crawler.parser.playwright_strings import _parse_segment
 from clippy.crawler.states import Action, Click, Enter, Input, Step, Task, Wheel
 from clippy.crawler.tools_capture import _print_console
+from clippy.dm.data_manager import DataManager
 from clippy.instructor import Instructor
-from clippy.utils.async_tools import timer
+from clippy.crawler.helpers import end_record, ainput
+import threading
 
 
 def _otherloaded(name: str):
     """helper func for attaching to page events"""
 
     async def _fn(*args, **kwargs):
-        print(f"{name} event")
+        logger.info(f"{name} event")
 
     return _fn
 
 
 async def catch_console_injections(msg: ConsoleMessage) -> Action:
-    if msg.text.startswith("CATCH"):
-        values = []
-        for arg in msg.args:
-            values.append(await arg.json_value())
+    if not msg.text.startswith("CATCH"):
+        return
 
-        # values = [await a.json_value() for a in msg.args]
+    # if msg.text.startswith("CATCH"):
+    values = []
+    for arg in msg.args:
+        values.append(await arg.json_value())
 
-        _print_console(*values)
-        if values[1].lower() == "debug":
-            print("debugging...", *values)
-            return
+    _print_console(*values, print_fn=logger.debug)
+    if values[1].lower() == "debug":
+        logger.debug("debugging...", *values)
+        return
 
-        _, class_name, *data = values  # data is list of [CATCH, class_name, *data]
+    _, class_name, *data = values  # data is list of [CATCH, class_name, *data]
 
-        action = Action[class_name](*data)
-        return action
+    action = Action[class_name](*data)
+    return action
 
 
 class CaptureAsync(Capture):
     async_tasks = {}
 
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self,
+        objective: str = None,
+        start_page: str = None,
+        data_manager: DataManager = None,
+        use_llm: bool = False,
+        *args,
+        **kwargs,
+    ) -> None:
+        super().__init__(
+            objective=objective, start_page=start_page, data_manager=data_manager, use_llm=use_llm, *args, **kwargs
+        )
+
+        self.condition = asyncio.Condition()
+
+        self.captured_screenshot_ids = []
 
     def _setup_coroutine(self, co: Coroutine):
         self.async_tasks[co.__name__] = co
@@ -56,82 +75,55 @@ class CaptureAsync(Capture):
             self.instructor = Instructor()
             self.dom_parser = DOMSnapshotParser(keep_device_ratio=False)
 
-    async def domcontentloaded_hook(self, page: Page):
-        print("\n==>PAGE-CHANGED...wait for screenshot", end="")
-        # let task know its changed
-        await self.task.page_change_async(page)
+    async def hook_update_task_new_page(self, page: Page):
+        logger.info(">=>PAGE-CHANGE")
 
-        # TODO move capture_screenshots into its own hook, but has to be able to get step name prior to screenshot
+        async with self.condition:
+            await self.task.page_change_async(page=page)
         # then we need to capture screenshot, since we use the task id for the name
-        await self._capture_screenshots()
-        print(">=>PAGE CHANGE COMPLETE")
+        # await self._capture_screenshots()
 
-    async def _capture_screenshots(self, path: str = None):
-        if path is None:
-            assert hasattr(self.task.curr_step, "id"), "task must have id"
+    async def hook_capture_screenshot(self, page: Page):
+        """take screenshot after page has loaded."""
+        await self.condition.wait_for(lambda: hasattr(self.task.curr_step, "id"))
+        async with self.condition:
+            # idk if this has ever happened but make sure we dont screenshot twice
+
+            if self.task.curr_step.id in self.captured_screenshot_ids:
+                return
+
             path = f"{self.data_manager._curr_task_output}/{self.task.curr_step.id}.png"
-        self.task.curr_step.screenshot_path = path
-        await self.page.screenshot(path=path, full_page=True)
+            self.task.curr_step.screenshot_path = path
+            await self.crawler.page.screenshot(path=path, full_page=True)
+            self.captured_screenshot_ids.append(self.task.curr_step.id)
 
-    async def console_hook(self, msg: ConsoleMessage):
-        action = await catch_console_injections(msg)
-        if action:
+    async def hook_console(self, msg: ConsoleMessage):
+        # action = await catch_console_injections(msg)
+        # if action:
+        #     self.task(action)
+        if action := await catch_console_injections(msg):
             self.task(action)
 
-    async def _get_elements_of_interest(self, cdp_client, page: Page, timeout=2):
-        start_time = time.time()
-        elements_of_interest = []
-        print("parsing tree...", end="")
+    def setup_page_hooks(self, page: Page):
+        # this captures actions from injections
+        page.on("console", self.hook_console)
+        # this one captures the page change
+        page.on("domcontentloaded", self.hook_update_task_new_page)
+        page.on("domcontentloaded", self.hook_capture_screenshot)
 
-        while ((time.time() - start_time) < timeout) and (len(elements_of_interest) == 0):
-            tree = await self.crawler.get_tree(self.dom_parser.cdp_snapshot_kwargs)
-            elements_of_interest = await self.dom_parser.crawl_async(tree=tree, page=page)
-        return elements_of_interest
+    async def start(self, crawler: Crawler, start_page: str = None, pause: bool = True):
+        self.crawler = crawler
 
-    # @timer
-    async def llm_assist_hook(self, page: Page):
-        if not self.use_llm:
-            return
+        page = await crawler.start(key_exit=True)
+        await crawler.add_background_task(crawler.allow_end_early())
 
-        if (elements_of_interest := await self._get_elements_of_interest(self.cdp_client, page)) == []:
-            print("tried to crawl but didnt work...")
-            return
+        self.setup_page_hooks(page=page)
 
-        # elements_of_interest = await self.dom_parser.crawl_async(self.cdp_client, page)
-        element_buffer = self.dom_parser.page_element_buffer
-        ids_of_interest = self.dom_parser.ids_of_interest
+        await page.goto(start_page)
 
-        if not ids_of_interest:
-            print("no elements of interest, skipping...")
-            return
-
-        locators = await asyncio.gather(
-            *[
-                self.dom_parser._get_from_location_async(element_buffer[i], page)
-                for idx, i in enumerate(ids_of_interest)
-            ]
-        )
-
-        # TODO: shorten it for time being
-        elements_of_interest = elements_of_interest[:50]
-        scored_elements = await self.instructor.compare_all_page_elements_async(
-            self.objective, page_elements=elements_of_interest, url=page.url
-        )
-
-        if not scored_elements:
-            breakpoint()
-
-        return await self.instructor.highlight_from_scored_async(scored_elements, locators=locators, page=page)
-
-    def _setup_page_hooks(self, page: Page):
-        # watch for console injections + page changes
-        page.on("console", self.console_hook)
-        page.on("domcontentloaded", self.domcontentloaded_hook)
-
-    async def with_crawler(self, crawler: Crawler, start_page: str = None):
-        self._setup_page_hooks(page=crawler.page)
-        await crawler.page.goto(start_page)
-        await self.page.pause()
+        if pause:  # you wont pause if its a replay/headless
+            await page.pause()
+        # breakpoint()
 
 
 class HumanCaptureAsync(CaptureAsync):
@@ -140,19 +132,7 @@ class HumanCaptureAsync(CaptureAsync):
         self.action_idx = 0
 
     async def human_start(self):
-        raise NotImplementedError("Migrate to Using CaptureAsync only")
-        self.data_manager.capture_start()
-        # self.setup_llm_suggest()
-        self.crawler = Crawler()
-        self.page = await self.crawler.start()
-
-        self._setup_page_hooks(page=self.page)
-        self.cdp_client = await self.crawler.get_cdp_client()
-        await self.page.goto(self.start_page)
-
-        # this is where a human starts doing things
-        await self.page.pause()
-        await self.crawler.end()
+        raise NotImplementedError("Use CaptureAsync only")
 
     async def framenavigated_hook(self, frame: Frame):
         pass

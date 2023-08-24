@@ -61,9 +61,7 @@ def replace_special_fields(cmd):
 
 
 class Executor:
-    user_agent: str = (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36"
-    )
+    user_agent: str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36"
 
     def __init__(self, keep_device_ratio: bool = False, headless: bool = False):
         self.browser = sync_playwright().start().chromium.launch(headless=headless)
@@ -171,7 +169,9 @@ class Executor:
         time.sleep(1)
 
 
-def _find_locator_for_element(self, element: Dict[str, Any], inner_text: str = None, meta=None, page: Page = None) -> Optional[Locator]:
+def _find_locator_for_element(
+    self, element: Dict[str, Any], inner_text: str = None, meta=None, page: Page = None
+) -> Optional[Locator]:
     if page is None:
         page = self.page
 
@@ -201,3 +201,29 @@ def _find_locator_for_element(self, element: Dict[str, Any], inner_text: str = N
 class CommandDispatch:
     def __init__(self, executor: Executor) -> None:
         self.executor = executor
+
+
+def reset(self) -> ClippyState:
+    executor = Executor(keep_device_ratio=self.keep_device_ratio, headless=self.headless)
+    self.state = ClippyState(executor=executor)
+    return self.state
+
+
+def start_agent(self):
+    state = self.reset()
+    defaults = ClippyDefaults()
+    state.executor.go_to_page(defaults.start_page)
+
+    if self.objective is None:
+        objective = self._get_input(defaults.objective)
+    else:
+        print(f"starting with objective: {self.objective}")
+        objective = self.objective
+
+    state.objective = objective
+    self.instructor = Instructor(objective)
+
+    # set initial loop states
+    state.pre_step = self.get_page_state
+    state.next_step = self.instructor.step_handler.first_step
+    state.post_step = self.instructor.step_handler.post_state

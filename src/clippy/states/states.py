@@ -7,8 +7,8 @@ from playwright.async_api import Frame, Page
 from playwright.sync_api import Frame as FrameSync
 from playwright.sync_api import Page as PageSync
 
-from clippy.crawler.states.actions import Action
-from clippy.crawler.states.base import ModelBase
+from clippy.states.actions import Action
+from clippy.states.base import ModelBase
 
 short_url_n = 100  # if None will print whole
 
@@ -76,19 +76,9 @@ class Step(ModelBase):
         for action in self.actions:
             print(action)
 
-    # def as_dict(self):
-    #     return asdict(self)
-    # _url = str(uuid.uuid5(uuid.NAMESPACE_URL, self.url))
-    # return {
-    #     # "page": _url,  # should be screenshot in future
-    #     "url": self.url,
-    #     "id": self.id,
-    #     "actions": [a.as_dict() for a in self.actions],
-    # }
-
 
 @dataclass
-class Task:
+class Task(ModelBase):
     objective: str
     id: str | None = str(uuid.uuid4())
     steps: List[Step] = field(default_factory=list)
@@ -104,6 +94,15 @@ class Task:
     def __repr__(self):
         steps_info = "\n".join([f"{s}" for s in self.steps])
         return f"Task: {self.objective} | {len(self.steps)} steps \n{steps_info}"
+
+    @property
+    def current(self):
+        return self.curr_step
+
+    @current.setter
+    def current(self, step: Step):
+        self.curr_step = step
+        self.steps.append(step)
 
     @classmethod
     def from_dict(cls, data: dict):
@@ -137,15 +136,13 @@ class Task:
     async def page_change_async(self, page: Page | Frame | str):
         self.page_change(page=page)
 
-    def page_change(self, page: Page | Frame | str):
-        if page is None:
-            breakpoint()
-        url = page
-        if isinstance(page, (Page, Frame, PageSync, FrameSync)):
+    def page_change(self, page: Page | Frame = None, url: str = None):
+        if page:
             url = page.url
 
         if self._check_new_page(url) is False:
             return
+
         self.curr_step = Step(url=url)
         self.steps.append(self.curr_step)
 
@@ -161,13 +158,3 @@ class Task:
             prev_step.merge()
 
         return True
-
-    # def dump(self):
-    #     # dump as json
-    #     data = {
-    #         "id": self.id,
-    #         "timestamp": self.timestamp,
-    #         "objective": self.objective,
-    #         "steps": [step.as_dict() for step in self.steps],
-    #     }
-    #     return data
