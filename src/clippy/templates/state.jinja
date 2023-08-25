@@ -2,8 +2,8 @@ Present state:
 Objective: {{ objective }}
 Current URL: {{ url }}
 ---
-Current Browser Content:
-{{ browser_content }}
+Current Browser Content: {% if browser_content %}{% for line in browser_content %}
+- {{ line }}{% endfor %}{% else %}None{% endif %}
 ---
-Previous actions:
-{{ previous_commands }}
+Previous actions: {% if previous_commands %}{% for cmd in previous_commands %}
+- {{ cmd }}{% endfor %}{% else %}None{% endif %}

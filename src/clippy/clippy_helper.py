@@ -11,9 +11,9 @@ from clippy import constants
 from clippy.capture import CaptureAsync, MachineCaptureAsync
 from clippy.crawler.crawler import Crawler
 from clippy.crawler.parser.dom_snapshot import DOMSnapshotParser
-from clippy.data_states import ClippyState, PageState
 from clippy.dm.data_manager import DataManager
 from clippy.states import Task
+from clippy.instructor import Instructor
 
 
 def _device_ratio_check():
@@ -35,7 +35,6 @@ def _get_input(string: str = None) -> str:
 
 
 class Clippy:
-    state: ClippyState
     # crawler - capture - data_manager
     crawler: Crawler
     capture: CaptureAsync
@@ -57,10 +56,8 @@ class Clippy:
         self.start_page = start_page
         self.objective = objective
 
-        self.state: ClippyState = None
-        self.page_state: PageState = None
         self.clear_step_states = clear_step_states
-        self.data_manager = DataManager(data_dir=data_dir)
+        self.data_manager = DataManager(data_dir=data_dir)  # data manager handles tasks/steps/dataclasses
 
     async def start(self, args: Namespace):
         cmd = args.cmd
@@ -160,49 +157,22 @@ class Clippy:
         task = tasks[task_select]
         return task
 
-    def get_page_state(self, state: ClippyState) -> ClippyState:
-        """
-        get the observation (meaning the page elements )
-        """
-
-        page_elements = state.crawler.crawl()
-        page_state = PageState(url=state.crawler.page.url, page_elements=page_elements)
-        state.page_state = page_state
-        return state
-
-    def step(self, state: ClippyState) -> ClippyState:
-        """
-        loop is like this:
-        1. get the page state (includes page elements)
-        2. get prerequisites for state
-        2. process page with instructor (get next command and next command target)
-        3. get feedback
-
-        """
-
-        if state.pre_step:
-            state = state.pre_step(state)
-
-        state = state.next_step(state)
-
-        if state.post_step:
-            state = state.post_step(state)
-
-        if self.clear_step_states:
-            state.pre_step = None
-            state.post_step = None
-
-        state.pre_step = state.response.next_steps["pre_step"]
-        state.next_step = state.response.next_steps["next_step"]
-        state.post_step = state.response.next_steps["post_step"]
-
-        return state
-
-    def run(self) -> ClippyState:
-        state = self.state
-        state = self.step(state)
-        return state
-
     async def suggest_action(self):
-        # first get the page state
-        self.dom_parser = DOMSnapshotParser()
+        self.dom_parser = DOMSnapshotParser(crawler=self.crawler)
+        # get all the links/actions
+        elems, elems_ids = await self.dom_parser.parse()
+        assert len(elems) == len(elems_ids) and len(elems) > 0, "Something wrong with elems/ids"
+
+        # id1 = elems_ids[0]
+        # locator1 = await self.dom_parser._get_from_location_async(page_elem_buffer[id1], self.crawler.page)
+
+        locators = await self.dom_parser.get_locators_async()
+
+        elems = elems[:20]
+        instructor = Instructor(use_async=True)
+        scored_elems = await instructor.compare_all_page_elements(
+            self.objective, page_elements=elems, url=self.crawler.page.url
+        )
+
+        # await locators[2].first.click()
+        breakpoint()

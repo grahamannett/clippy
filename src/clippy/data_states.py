@@ -111,30 +111,3 @@ class CommandResponse(Response):
         self.cmd = cmd
 
 
-@dataclass
-class PageState:
-    url: str = None
-    page_elements: List[str] = None
-
-    previous_state: "PageState" = None
-
-
-@dataclass
-class ClippyState:
-    objective: str = None
-
-    response: Response = None
-    response_type: str = None
-
-    page_state: PageState = None
-
-    pre_step: Callable[..., Any] = None
-    next_step: Callable[..., Any] = None
-    post_step: Callable[..., Any] = None
-
-    def _replace(self, **kwargs):
-        for k, v in kwargs.items():
-            setattr(self, k, v)
-        return self
-
-

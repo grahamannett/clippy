@@ -1,9 +1,11 @@
 import sys
 import re
 from dataclasses import dataclass
-from typing import List, Any, Dict, Tuple
+from typing import Iterator, List, Any, Dict, Tuple
 from asyncio import gather
 from playwright.async_api import CDPSession, Page, Locator
+
+from clippy.crawler.crawler import Crawler
 
 black_listed_elements = set(
     [
@@ -36,6 +38,17 @@ black_listed_elements = set(
 #                    'node_index', 'backend_node_id', 'node_name', 'node_value', 'node_meta',
 #                     'is_clickable', 'origin_x', 'origin_y', 'center_x', 'center_y'
 #              ]
+
+
+TYPEABLE = ["input", "select"]
+CLICKABLE = ["link", "button"]
+
+
+def filter_page_elements(elements: List[str]) -> Iterator[str]:
+    for element in elements:
+        for t in TYPEABLE + CLICKABLE:
+            if t in element:
+                yield element
 
 
 def convert_name(node_name: str, has_click_handler: bool):
@@ -84,7 +97,9 @@ def add_to_hash_tree(
         parent_name = strings[node_names[parent_id]].lower()
         grand_parent_id = parent[parent_id]
 
-        add_to_hash_tree(hash_tree, tag, parent_id, parent_name, grand_parent_id, strings, node_names, parent, attributes)
+        add_to_hash_tree(
+            hash_tree, tag, parent_id, parent_name, grand_parent_id, strings, node_names, parent, attributes
+        )
 
     is_parent_desc_anchor, anchor_id = hash_tree[parent_id_str]
 
@@ -154,14 +169,6 @@ def _get_loc_helper(element_buffer: Dict[str, Any], page: Page):
     return loc
 
 
-def _get_from_location(element_buffer: dict, page: Page) -> Locator | ElementOutOfViewport:
-    loc = _get_loc_helper(element_buffer, page)
-    if loc.count() == 0:
-        return _out_of_viewport_element(element_buffer, page.viewport_size)
-
-    return loc
-
-
 async def _get_from_location_async(element_buffer: dict, page: Page) -> Locator | ElementOutOfViewport:
     loc = _get_loc_helper(element_buffer, page)
     if await loc.count() == 0:
@@ -192,14 +199,14 @@ class DOMSnapshotParser(TreeParser):
         "includePaintOrder": True,
     }
 
-    def __init__(self, keep_device_ratio: bool = False, crawler: "Crawler" = None, *args, **kwargs):
+    def __init__(self, keep_device_ratio: bool = False, crawler: Crawler = None, *args, **kwargs):
         super().__init__()
         self.keep_device_ratio = keep_device_ratio
         self.page_element_buffer = {}
         self.elements_of_interest = []
 
         # allow for crawler to be passed for dev purposes
-        self._crawler = crawler
+        self.crawler = crawler
         self._current_url = None
 
     def _page_sizes(self, page: Page):
@@ -225,19 +232,16 @@ class DOMSnapshotParser(TreeParser):
     async def _get_from_location_async(self, element_buffer: dict, page: Page):
         return await _get_from_location_async(element_buffer, page)
 
-    def _get_from_location(self, element_buffer: dict, page: Page):
-        return _get_from_location(element_buffer, page)
-
-    def get_locators(self, page: Page):
-        locators = [_get_from_location(self.page_element_buffer[i], page) for i in self.ids_of_interest]
-        return locators
-
-    async def get_locators_async(self, page: Page):
-        locators = await gather(*[_get_from_location_async(self.page_element_buffer[i], page) for i in self.ids_of_interest])
+    async def get_locators_async(self):
+        locators = await gather(
+            *[_get_from_location_async(self.page_element_buffer[i], self.crawler.page) for i in self.ids_of_interest]
+        )
         return locators
 
     def need_crawl(self, page: Page):
-        if not isinstance(page.url, str):  # if its not a str then page is being constructed or something and we cant do anything
+        if not isinstance(
+            page.url, str
+        ):  # if its not a str then page is being constructed or something and we cant do anything
             return False
 
         if (self._current_url != page.url) or (self.elements_of_interest == []):
@@ -246,22 +250,26 @@ class DOMSnapshotParser(TreeParser):
 
         return False
 
-    def crawl(self, page: Page, client: CDPSession = None, tree: Dict[str, Any] = None):
-        if tree is None:
-            tree = client.send("DOMSnapshot.captureSnapshot", self.cdp_snapshot_kwargs)
-        self._tree = tree
+    async def get_tree(self):
+        return await self.crawler.cdp_client.send(
+            "DOMSnapshot.captureSnapshot",
+            self.cdp_snapshot_kwargs,
+        )
 
-        device_pixel_ratio, win_scroll_x, win_scroll_y, win_upper_bound, win_left_bound, win_width, win_height = self._page_sizes(page)
-        elements_of_interest = self.parse_tree(tree, win_upper_bound, win_width, win_left_bound, win_height, device_pixel_ratio)
-        self.elements_of_interest = elements_of_interest
-        return elements_of_interest
+    async def parse(self):
+        self.tree = await self.get_tree()
+        tree = self.tree
+        page = self.crawler.page
 
-    async def crawl_async(self, page: Page, client: CDPSession = None, tree: Dict[str, Any] = None):
-        if tree is None:
-            tree = await client.send("DOMSnapshot.captureSnapshot", self.cdp_snapshot_kwargs)
-        self._tree = tree
-
-        device_pixel_ratio, win_scroll_x, win_scroll_y, win_up_bound, win_le_bound, win_w, win_h = await self._page_sizes_async(page)
+        (
+            device_pixel_ratio,
+            win_scroll_x,
+            win_scroll_y,
+            win_up_bound,
+            win_le_bound,
+            win_w,
+            win_h,
+        ) = await self._page_sizes_async(page)
         elements_of_interest = self.parse_tree(tree, win_up_bound, win_w, win_le_bound, win_h, device_pixel_ratio)
         self.elements_of_interest = elements_of_interest
         return elements_of_interest
@@ -280,7 +288,11 @@ class DOMSnapshotParser(TreeParser):
 
         page_state_as_text = []
         # TODO: FIX THIS, ITS NOT WORKIGN FOR ME WITH AN EXTERNAL MONITOR
-        if (getattr(self, platform, sys.platform) == "darwin") and (device_pixel_ratio == 1) and not self.keep_device_ratio:  # lies
+        if (
+            (getattr(self, platform, sys.platform) == "darwin")
+            and (device_pixel_ratio == 1)
+            and not self.keep_device_ratio
+        ):  # lies
             device_pixel_ratio = 2
         # device_pixel_ratio = 2
 
@@ -294,7 +306,9 @@ class DOMSnapshotParser(TreeParser):
             {
                 "x": 0,
                 "y": 0,
-                "text": "[scrollbar {:0.2f}-{:0.2f}%]".format(round(percentage_progress_start, 2), round(percentage_progress_end)),
+                "text": "[scrollbar {:0.2f}-{:0.2f}%]".format(
+                    round(percentage_progress_start, 2), round(percentage_progress_end)
+                ),
             }
         )
 
@@ -557,7 +571,10 @@ class DOMSnapshotParser(TreeParser):
             converted_node_name = convert_name(node_name, is_clickable)
 
             # not very elegant, more like a placeholder
-            if converted_node_name not in ["button", "link", "input", "img", "textarea", "select"] and inner_text.strip() == "":
+            if (
+                converted_node_name not in ["button", "link", "input", "img", "textarea", "select"]
+                and inner_text.strip() == ""
+            ):
                 continue
             elif converted_node_name == "button" and meta == "" and inner_text.strip() == "":
                 continue
@@ -594,18 +611,4 @@ class DOMSnapshotParser(TreeParser):
 
         self.elements_of_interest = elements_of_interest
         self.ids_of_interest = ids_of_interest
-        return elements_of_interest
-
-
-if __name__ == "__main__":
-    tree_json = "tests/fixtures/tree-data.json"
-    import json
-
-    with open(tree_json, "r") as f:
-        tree = json.load(f)
-
-    snapshot = DOMSnapshotParser()
-
-    els = snapshot.parse_tree(tree)
-
-    breakpoint()
+        return elements_of_interest, ids_of_interest

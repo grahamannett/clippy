@@ -1,7 +1,9 @@
 from os import environ
-
 from typing import Any, Dict, List
+
 from jinja2 import Environment, FileSystemLoader, Template
+
+from clippy import constants
 
 
 def map(self, options: List[Dict[str, str]], **kwargs) -> List[str]:
@@ -22,7 +24,7 @@ Template.__call__ = __call__
 
 class StubHelper:
     available_templates = {}
-    environment = Environment(loader=FileSystemLoader(environ.get("TEMPLATES_DIR", "src/clippy/templates/")))
+    environment = Environment(loader=FileSystemLoader(environ.get("TEMPLATES_DIR", constants.TEMPLATES_DIR)))
 
     def map(self, template: Template, options: List[Dict[str, str]], **kwargs) -> List[str]:
         return [template(**{**opt, **kwargs}) for opt in options]

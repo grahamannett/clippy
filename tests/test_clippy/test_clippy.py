@@ -57,6 +57,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
 
     async def test_capture_assist(self):
         clippy = self.clippy
+        clippy.objective = "go to the newest posts page on hackernews"
 
         page = await clippy.start_capture(key_exit=False, goto_start_page=True)
         await clippy.suggest_action()

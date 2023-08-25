@@ -122,13 +122,6 @@ class Crawler:
     def get_cdp_client(self) -> Awaitable[CDPSession] | CDPSession:
         return self.page.context.new_cdp_session(self.page)
 
-    def get_tree(self, cdp_snapshot_kwargs: dict, cdp_client: CDPSession = None) -> Awaitable[dict] | dict:
-        cdp_client = cdp_client or self.cdp_client
-        return cdp_client.send(
-            "DOMSnapshot.captureSnapshot",
-            cdp_snapshot_kwargs,
-        )
-
     def extend_selectors(self):
         return Selector.register(self.pw)
 

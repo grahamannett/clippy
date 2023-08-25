@@ -45,6 +45,21 @@ class TestInstructor(unittest.IsolatedAsyncioTestCase):
         breakpoint()
 
 
+    async def test_embeds(self):
+        objective1 = "buy bodywash"
+        objective2 = "buy shampoo"
+        objective3 = "find a ticket for taylor swift concert"
+        client = CohereController.get_client_async(api_key=environ.get("COHERE_KEY"), check_api_key=True)
+        controller = CohereController(client=client)
+        _, obj, scores = await controller.find_most_similar_str(
+            objective=objective1, objectives=[objective2, objective3], return_all=True
+        )
+
+        self.assertEqual(obj, objective2)
+        self.assertTrue(scores[0] > scores[1])
+        await controller.close()
+
+
 if __name__ == "__main__":
     import torch
 

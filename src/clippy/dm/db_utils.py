@@ -9,7 +9,6 @@ from sqlmodel import JSON, Field, MetaData, Session, SQLModel, create_engine, te
 import sqlalchemy
 
 
-
 @dataclass
 class DatabaseConfig:
     url: str = "postgresql+psycopg2://localhost"
@@ -54,17 +53,43 @@ class DatabaseSetup:
             session.commit()
 
     def make_table(self, table_name: str = "testdb") -> None:
-        with sqlalchemy.create_engine("postgresql://postgres@localhost:5432", isolation_level="AUTOCOMMIT").connect() as connection:
+        with sqlalchemy.create_engine(
+            "postgresql://postgres@localhost:5432", isolation_level="AUTOCOMMIT"
+        ).connect() as connection:
             connection.execute(f"CREATE DATABASE {table_name}")
+
+
+class Generation:
+    # def __init__(self, response: "Generation" | "Generations"):
+    def __init__(self, response):
+        # if isinstance(response, "Generations"):
+        #     response = response[0]
+
+        self.data = {
+            "id": response.id,
+            "prompt": response.prompt,
+            "text": response.text,
+            "likelihood": response.likelihood,
+            "token_likelihoods": [{"token": t, "likelihood": l} for t, l in response.token_likelihoods],
+        }
+
+
+class Embedding:
+    def __init__(self, response):
+        breakpoint()
+        self.data = {
+            "id": response.id,
+            "embedding": response.embedding,
+        }
 
 
 class Database:
     db = tinydb.TinyDB("data/db/db.json")
+    Generation = Generation
+    Embedding = Embedding
 
     def __init__(self):
         pass
-
-
 
     # decorator to capture response and insert into database
     @classmethod

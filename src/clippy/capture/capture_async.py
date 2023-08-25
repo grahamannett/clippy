@@ -11,7 +11,6 @@ from clippy.crawler.parser.playwright_strings import _parse_segment
 from clippy.states import Action, Click, Enter, Input, Step, Task, Wheel
 from clippy.crawler.tools_capture import _print_console
 from clippy.dm.data_manager import DataManager
-from clippy.instructor import Instructor
 
 
 def _otherloaded(name: str):
@@ -41,18 +40,6 @@ async def catch_console_injections(msg: ConsoleMessage) -> Action:
 
     action = Action[class_name](*data)
     return action
-
-
-class ScreenshotHelper:
-    def __init__(self, crawler: Crawler):
-        self.crawler = crawler
-        self.captured_screenshot_ids = []
-
-    async def capture(self, page: Page):
-        pass
-
-    async def emit_done(self, page: Page):
-        await page.evaluate("console.log('screenshotEventDone')")
 
 
 class CaptureAsync(Capture):
@@ -110,9 +97,9 @@ class CaptureAsync(Capture):
         # first create events that hooks may need
         self.events["screenshot_event"] = asyncio.Condition()
 
-        # this captures actions from injections
+        # captures actions from injections
         page.on("console", self.hook_console)
-        # this one captures the page change
+        # things that need to happen on page change
         page.on("domcontentloaded", self.hook_dom_group)
 
     async def start(self, crawler: Crawler, start_page: str = None) -> Page:

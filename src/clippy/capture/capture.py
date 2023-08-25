@@ -3,11 +3,8 @@ from typing import Awaitable, Dict
 
 from playwright.async_api import Page
 
-from clippy.crawler.parser.dom_snapshot import DOMSnapshotParser
-
 from clippy.crawler.screenshot_matcher import ScreenshotMatcher
 from clippy.dm.data_manager import DataManager
-from clippy.instructor import Instructor
 
 from clippy.states import Action, Actions, Step, Task
 
@@ -112,16 +109,3 @@ class MachineCapture(Capture):
             y_value -= scroll_amt
 
         return page.mouse.click(x_value, y_value)
-
-    def setup_task(
-        self,
-        task: Task,
-        use_async: bool,
-        no_confirm: bool = False,
-    ):
-        self.task = task
-        self.dom_parser = DOMSnapshotParser()
-        self.instructor = Instructor(use_async=use_async)
-
-        if no_confirm:
-            self._step_through_actions = False

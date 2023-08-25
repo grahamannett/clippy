@@ -1,58 +1,58 @@
 import unittest
 from os import environ
-from clippy.controllers.apis.cohere_controller import CohereController
-
-
-prompt_test_str = """Given:
-    (1) an objective that you are trying to achieve
-    (2) the URL of your current web page
-    (3) a simplified text description of what's visible in the browser window
-
-Your commands are:
-    click X - click on element X.
-    type X "TEXT" - type the specified text into input X
-    summary - summarize the text in the page
-
-Present state:
-Objective: objective1
-Current URL: url1
-Current Browser Content:
----
-- 1
-- 2
----
-Previous actions:
-None
-Next Command:"""
 
 from clippy.stubs import StubTemplates
+from clippy.controllers.apis.cohere_controller import CohereController
+from clippy.crawler.parser.dom_snapshot import filter_page_elements
+
+elements = [
+    "button 1 hnname",
+    'link 2 "Hacker News"',
+    'link 3 "new"',
+    'text 4 "|"',
+    'link 5 "past"',
+    'text 6 "|"',
+    'link 7 "comments"',
+    'text 8 "|"',
+    'link 9 "ask"',
+    'text 10 "|"',
+    'link 11 "show"',
+    'text 12 "|"',
+    'link 13 "jobs"',
+    'text 14 "|"',
+    'link 15 "submit"',
+    'link 16 "login"',
+    'text 17 "1."',
+    'link 19 "OpenTF Announces Fork of Terraform"',
+    'text 20 "("',
+    'link 21 "opentf.org"',
+]
 
 
-class TestStubs(unittest.IsolatedAsyncioTestCase):
-    def test_state(self):
-        state = StubTemplates.state
-        state_str = state.render(objective="objective1", url="url1", browser_content="- 1\n- 2", previous_commands="None")
+class TestController(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        self.co = CohereController()
 
-        prompt = StubTemplates.prompt
-        prompt_str = prompt.render(state=state_str)
-        breakpoint()
+    async def asyncTearDown(self):
+        await self.co.close()
 
-        self.assertEquals(prompt_str, prompt_test_str)
+    async def test_tokenize(self):
+        co = self.co
+        test_string = "tokenized string"
 
+        tokens = (await co.tokenize(test_string)).tokens
+        assert len(tokens) > 2
 
-class TestInstructor(unittest.IsolatedAsyncioTestCase):
-    def test_instructor(self):
-        pass
+        string = (await co.detokenize(tokens=tokens)).text
+        assert string == test_string
 
-    async def test_embeds(self):
-        objective1 = "buy bodywash"
-        objective2 = "buy shampoo"
-        objective3 = "find a ticket for taylor swift concert"
-        client = CohereController.get_client_async(api_key=environ.get("COHERE_KEY"), check_api_key=True)
-        controller = CohereController(client=client)
-        _, obj, scores = await controller.find_most_similar_str(objective=objective1, objectives=[objective2, objective3], return_all=True)
+        bad_string = (await co.detokenize(tokens=tokens + [9000])).text
 
-        self.assertEqual(obj, objective2)
-        self.assertTrue(scores[0] > scores[1])
-        await controller.close()
+        assert string != bad_string
 
+    async def test_controller_score(self):
+        co = self.co
+
+        scored_text = await co.score_text("This would be a good sentence to score.")
+        bad_scored_text = await co.score_text("Rogue asdf !HEllo Friend!! Yessir.")
+        assert scored_text > bad_scored_text
