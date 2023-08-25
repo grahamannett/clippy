@@ -1,30 +1,26 @@
-from typing import Awaitable
+import asyncio
+from typing import Awaitable, Dict
 
 from playwright.async_api import Page
 
 from clippy.crawler.parser.dom_snapshot import DOMSnapshotParser
-from clippy.crawler.parser.playwright_strings import _parse_segment
+
 from clippy.crawler.screenshot_matcher import ScreenshotMatcher
-
-# from clippy.states import actions
-# from clippy.states.states import Step, Task
-from clippy.states import Step, Task, actions, Action, Input
-
-# from clippy.states import Action, ActionTypes, Click, Enter, Input, Step, Task, Wheel
 from clippy.dm.data_manager import DataManager
 from clippy.instructor import Instructor
 
-
-
+from clippy.states import Action, Actions, Step, Task
 
 
 class Capture:
-    input_delay = 100
+    input_delay: int = 100
+    events: Dict[str, asyncio.Event | asyncio.Condition] = {}
 
     def __init__(
         self,
         objective: str = None,
         start_page: str = None,
+        task: Task = None,
         data_manager: DataManager = None,
         use_llm: bool = False,
     ) -> None:
@@ -33,7 +29,7 @@ class Capture:
 
         self.data_manager = data_manager
 
-        self.task: Task = Task(self.objective)
+        self.task: Task = task or Task(self.objective)
         self.ss_match = ScreenshotMatcher()
 
         self.use_llm = use_llm
@@ -45,7 +41,7 @@ class Capture:
     def end_capture(self):
         self.data_manager.save(task=self.task)
 
-    def confirm_input(self, next_type: actions.Action | Step, confirm: bool = True, **kwargs):
+    def confirm_input(self, next_type: Action | Step, confirm: bool = True, **kwargs):
         if not confirm:
             return
         print(f"next {next_type.__class__.__name__} will be:\n{next_type}\n" + "=" * 10)
@@ -58,23 +54,24 @@ class Capture:
             self._step_through_actions = False
 
 
+# THIS SHOULD BE PART OF CRAWLER
 class MachineCapture(Capture):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._step_through_actions = True
         self._curr_step = None
 
-    def _exec_python_locator(self, action: actions.Click, page: Page, **kwargs):
+    def _exec_python_locator(self, action: Actions.Click, page: Page, **kwargs):
         return eval(f"page.{action.python_locator}")
         # return exec(f"page.{action.python_locator}")
 
     def execute_none(self, *args, **kwargs) -> None:
         pass
 
-    def execute_input(self, action: actions.Input, page: Page, **kwargs) -> Awaitable[None] | None:
+    def execute_input(self, action: Actions.Input, page: Page, **kwargs) -> Awaitable[None] | None:
         return page.keyboard.type(text=action.value, delay=self.input_delay)
 
-    def execute_wheel(self, action: actions.Wheel, page: Page, increm: int = 250, **kwargs) -> Awaitable[None] | None:
+    def execute_wheel(self, action: Actions.Wheel, page: Page, increm: int = 250, **kwargs) -> Awaitable[None] | None:
         # TODO: I dont think this works if there is peripheral scrolling.  NEED TO TEST
         page_x, page_y = page.viewport_size["width"], page.viewport_size["height"]
         final_X = action.deltaX

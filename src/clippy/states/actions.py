@@ -12,7 +12,7 @@ from enum import Enum
 # NOTE: Using camelCase so it matches more closely with js
 
 
-class ActionBase:
+class Action:
     prev: "Action" = None
     data: Any = None
     allow_merge: bool = False
@@ -21,6 +21,9 @@ class ActionBase:
     def __post_init__(self):
         """will be called in all dataclasses"""
         pass
+
+    # def __class_getitem__(cls, class_name: str):
+    #     return Actions.__dict__[class_name]
 
     @classmethod
     def factory(cls, class_name: str, data: List[str]):
@@ -43,26 +46,6 @@ class ActionBase:
 
     async def async_callback(self, *args, **kwargs):
         pass
-
-
-class Action(ActionBase):
-    """
-    - why is this not just ActionBase? prevent the sub-actions from having stuff like Input.Input or Click['Click']
-    Maybe could be useful but keep out for now
-    """
-
-    Click: Click = Click
-    Input: Input = Input
-    Enter: Enter = Enter
-    Wheel: Wheel = Wheel
-
-    def __class_getitem__(cls, class_name: str):
-        return cls.__dict__[class_name]
-
-    @classmethod
-    def get_types(cls):
-        # WARNING: prefer to use ActionTypes[] instead as its faster
-        return {s.__name__: s for s in cls.__subclasses__()}
 
 
 @dataclass
@@ -99,7 +82,7 @@ class BoundingBox:
 
 
 @dataclass
-class Click(ActionBase):
+class Click(Action):
     page_x: int = None
     page_y: int = None
     selector: str = None
@@ -142,7 +125,7 @@ class Click(ActionBase):
 
 
 @dataclass
-class Input(ActionBase):
+class Input(Action):
     value: str = None
     page_x: int = None
     page_y: int = None
@@ -160,12 +143,12 @@ class Input(ActionBase):
 
 
 @dataclass
-class Enter(ActionBase):
+class Enter(Action):
     value: str = None
 
 
 @dataclass
-class Wheel(ActionBase):
+class Wheel(Action):
     deltaX: int = None
     deltaY: int = None
 
@@ -182,19 +165,24 @@ class Wheel(ActionBase):
             self.update(action)
 
 
-# Make This A Class For Type Hinting
-# class ActionTypes(Enum):
-#     Click = Click
-#     Input = Input
-#     Enter = Enter
-#     Wheel = Wheel
+class Actions(Action):
+    """
+    - why is this not just Action? prevent the sub-actions from having stuff like Input.Input or Click['Click']
+    Maybe could be useful but keep out for now
+    """
 
+    Click: Click = Click
+    Input: Input = Input
+    Enter: Enter = Enter
+    Wheel: Wheel = Wheel
 
-# class ActionTypes(object):
-#     Click: Click = Click
-#     Input: Input = Input
-#     Enter: Enter = Enter
-#     Wheel: Wheel = Wheel
+    # to allow Actions.Action for type hinting/isinstance
+    Action: Action = Action
 
-#     def __class_getitem__(cls, class_name: str):
-#         return cls.__dict__[class_name]
+    def __class_getitem__(cls, class_name: str):
+        return cls.__dict__[class_name]
+
+    @classmethod
+    def get_types(cls):
+        # WARNING: prefer to use ActionTypes[] instead as its faster
+        return {s.__name__: s for s in Action.__subclasses__()}

@@ -1,13 +1,8 @@
-import datetime
 import json
 import os
-from typing import List
 import shutil
-from clippy.controllers.apis.cohere_controller import Controller
 
-from clippy.crawler.states.states import Action, Task
-
-# from clippy.stubs.templates.text.text_stubs import StubTemplates
+from clippy.states import Task
 
 
 class DataManager:
@@ -17,18 +12,21 @@ class DataManager:
         self.data_dir = data_dir
         self.tasks = []
 
-        self._curr_task_output = f"{self.data_dir}/current"
-
+        # self.curr_task_output = f"{self.data_dir}/current"
         self._clear_on_start = True
+
+    @property
+    def curr_task_output(self):
+        return f"{self.data_dir}/current"
 
     def capture_start(self):
         if self._clear_on_start:
             self.clear_current()
 
     def clear_current(self):
-        if os.path.exists(self._curr_task_output):
-            shutil.rmtree(self._curr_task_output)
-        os.makedirs(self._curr_task_output, exist_ok=True)
+        if os.path.exists(self.curr_task_output):
+            shutil.rmtree(self.curr_task_output)
+        os.makedirs(self.curr_task_output, exist_ok=True)
 
     def page_path(self, str):
         pass
@@ -83,7 +81,7 @@ class DataManager:
         return True
 
     def dump_task(self, task: Task):
-        task_file = f"{self._curr_task_output}/task.json"
+        task_file = f"{self.curr_task_output}/task.json"
         json_data = task.dump()
         with open(task_file, "w") as f:
             json.dump(json_data, f, indent=4)
@@ -93,7 +91,7 @@ class DataManager:
         self.dump_task(task)
         folder = self.get_folder(task)
 
-        shutil.copytree(self._curr_task_output, folder)
+        shutil.copytree(self.curr_task_output, folder)
         print("saved data manager... ")
 
     def get_folder(self, task: Task):

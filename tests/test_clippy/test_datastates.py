@@ -3,9 +3,7 @@ import unittest
 
 # from clippy.states.states import Step, Task
 # from clippy.states.actions import Input, Action
-from clippy.states import Step, Task, actions, Action, Input
-
-breakpoint()
+from clippy.states import Step, Task, Actions, Input
 
 
 class TestTask(unittest.TestCase):
@@ -19,9 +17,11 @@ class TestTask(unittest.TestCase):
         task.page_change(step1)
 
         type_action = Input(value="test", page_x=1, page_y=2)
+
         task(type_action)
 
-        task(Action["Click"](page_x=1, page_y=2, selector="a link"))
+        task(Actions["Click"](page_x=1, page_y=2, selector="a link"))
 
         out = task.dump()
-        breakpoint()
+
+        self.assertTrue(len(out["steps"]) > 0)

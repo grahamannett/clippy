@@ -1,7 +1,7 @@
 import random
 from pathlib import Path
 
-from clippy.crawler.states.states import Task
+from clippy.states import Task
 
 task_bank_dir = "clippy/taskgen/"
 

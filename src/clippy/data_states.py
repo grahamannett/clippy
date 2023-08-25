@@ -138,13 +138,3 @@ class ClippyState:
         return self
 
 
-@dataclass
-class ClippyDefaults:
-    start_page: str = default_start_page
-    objective: str = default_objective
-
-    def __call__(self, inst):
-        for key, val in self.__dict__.items():
-            if key not in inst.__dict__:
-                setattr(inst, key, val)
-        return self

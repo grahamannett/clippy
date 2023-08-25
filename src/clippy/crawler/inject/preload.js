@@ -1,3 +1,5 @@
+// INFO: As I learn more about playwright, I am realizing that I would probably want to use
+// expose_binding or expose_function in python from playwright rather than transmitting data over console.log
 // console.log("CATCH: From preload.js")
 const CATCH_FLAG = "CATCH"
 

@@ -203,6 +203,18 @@ class CommandDispatch:
         self.executor = executor
 
 
+@dataclass
+class ClippyDefaults:
+    start_page: str = default_start_page
+    objective: str = default_objective
+
+    def __call__(self, inst):
+        for key, val in self.__dict__.items():
+            if key not in inst.__dict__:
+                setattr(inst, key, val)
+        return self
+
+
 def reset(self) -> ClippyState:
     executor = Executor(keep_device_ratio=self.keep_device_ratio, headless=self.headless)
     self.state = ClippyState(executor=executor)

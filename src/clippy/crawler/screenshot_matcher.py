@@ -2,7 +2,7 @@ import os
 
 import cv2
 
-from clippy.crawler.states import Action, Step
+from clippy.states import Action
 from playwright.async_api import Page
 
 

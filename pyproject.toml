@@ -31,6 +31,8 @@ build-backend = "pdm.backend"
 server = { shell = "cd src/trajlab && reflex run" }
 
 [tool.pdm.dev-dependencies]
-test = [
-    "pytest>=7.4.0",
-]
+test = ["pytest>=7.4.0"]
+
+[tool.pytest.ini_options]
+# ignore warnings not from clippy
+filterwarnings = ["ignore", "default:::clippy"]

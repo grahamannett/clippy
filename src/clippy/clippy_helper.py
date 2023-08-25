@@ -1,16 +1,19 @@
 import asyncio
+from argparse import Namespace
 from distutils.util import strtobool
 from os import environ
 from typing import List
-from argparse import Namespace
 
-from clippy.capture import CaptureAsync, MachineCaptureAsync, MachineCaptureSync
-from clippy.crawler.crawler import Crawler
-from clippy.crawler.states.states import Task
-from clippy.data_states import ClippyDefaults, ClippyState, PageState
-from clippy.dm.data_manager import DataManager
-from clippy.instructor import Instructor
+from loguru import logger
+from playwright.async_api import Page
+
 from clippy import constants
+from clippy.capture import CaptureAsync, MachineCaptureAsync
+from clippy.crawler.crawler import Crawler
+from clippy.crawler.parser.dom_snapshot import DOMSnapshotParser
+from clippy.data_states import ClippyState, PageState
+from clippy.dm.data_manager import DataManager
+from clippy.states import Task
 
 
 def _device_ratio_check():
@@ -27,8 +30,16 @@ def _check_exec_type(exec_type: str, task: str):
     return exec_type
 
 
-class ClippyHelper:
+def _get_input(string: str = None) -> str:
+    return input(string)
+
+
+class Clippy:
     state: ClippyState
+    # crawler - capture - data_manager
+    crawler: Crawler
+    capture: CaptureAsync
+    data_manager: DataManager
 
     def __init__(
         self,
@@ -36,6 +47,7 @@ class ClippyHelper:
         start_page: str = constants.default_start_page,
         headless: bool = False,
         clear_step_states: bool = False,
+        data_dir: str = "data/tasks",
     ):
         # gui related settings
 
@@ -48,7 +60,7 @@ class ClippyHelper:
         self.state: ClippyState = None
         self.page_state: PageState = None
         self.clear_step_states = clear_step_states
-        self.data_manager = DataManager()
+        self.data_manager = DataManager(data_dir=data_dir)
 
     async def start(self, args: Namespace):
         cmd = args.cmd
@@ -58,9 +70,7 @@ class ClippyHelper:
         exec_type = _check_exec_type(args.exec_type, cmd)
 
         funcs = {
-            "sync": {
-                "replay": self.run_replay(class_handler=MachineCaptureSync),
-            },
+            "sync": {},
             "async": {
                 # "assist": self.run_assist,
                 "capture": self.run_capture,
@@ -84,15 +94,43 @@ class ClippyHelper:
             print("no objective set, please enter objective")
             self.objective = self._get_input(self.objective)
 
-    async def run_capture(self, use_llm: bool = False, **kwargs):
-        capture = CaptureAsync(objective=self.objective, data_manager=self.data_manager)
-        crawler = Crawler(headless=False)
+    async def wait_until(self, message: str, timeout: float = 0.5, amt: float = 0.1):
+        # idk how to ensure that we have started taking screenshot when screenshot is fired on domcontentloaded which might not happen before we get here
+        # Ive tried a lot of things besides just sleeping but the order of stuff happening is not consistent
+        # there is probably a better way to do this using async but would require knowing exactly what is happening
+        await asyncio.sleep(amt)
 
-        await capture.start(crawler, start_page=self.start_page)
-        await crawler.end()
-        capture.end_capture()
+        if event := self.capture.events.get(message, None):
+            logger.debug(f"waiting on {message} with {event}")
+            while event.locked():
+                await asyncio.sleep(amt)
 
-    def run_replay(self, class_handler: MachineCaptureAsync | MachineCaptureSync):
+                if (timeout := timeout - amt) <= 0:
+                    logger.debug(f"timeout on {message}")
+                    event.notify_all()
+                    return
+
+    async def start_capture(self, key_exit: bool = True, goto_start_page: bool = True):
+        self.capture = CaptureAsync(objective=self.objective, data_manager=self.data_manager)
+        self.crawler = Crawler(headless=self.headless, key_exit=key_exit)
+        page = await self.capture.start(self.crawler)
+        if goto_start_page:
+            await page.goto(self.start_page)
+        return page
+
+    async def end_capture(self):
+        await self.crawler.end()
+        self.capture.end_capture()
+
+    async def run_capture(self, use_pause: bool = True, **kwargs):
+        self.page = await self.start_capture()
+
+        if use_pause:
+            await self.page.pause()
+
+        await self.end_capture()
+
+    def run_replay(self, class_handler: MachineCaptureAsync):
         def _replay(use_llm: bool, no_confirm: bool, **kwargs):
             task = self.get_task_for_replay(self.data_manager.tasks)
             capture = class_handler(
@@ -113,7 +151,7 @@ class ClippyHelper:
                 f"Task-{t_i} is {task.objective} with {n_steps} steps and {n_actions} num_actions @ {tstamp if tstamp else 'unknown'}"
             )
 
-        task_select = self._get_input("Select task: ")
+        task_select = _get_input("Select task: ")
         try:
             task_select = int(task_select)
         except ValueError:
@@ -121,9 +159,6 @@ class ClippyHelper:
             breakpoint()
         task = tasks[task_select]
         return task
-
-    def _get_input(self, string: str = None):
-        return input(string)
 
     def get_page_state(self, state: ClippyState) -> ClippyState:
         """
@@ -167,3 +202,7 @@ class ClippyHelper:
         state = self.state
         state = self.step(state)
         return state
+
+    async def suggest_action(self):
+        # first get the page state
+        self.dom_parser = DOMSnapshotParser()

@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
-from clippy.crawler.states.states import Task
+from clippy.states import Task
 from clippy.stubs.stubs import StubHelper, StubTemplates, Template
 
 

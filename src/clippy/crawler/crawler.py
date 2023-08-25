@@ -135,21 +135,22 @@ class Crawler:
     def injection(self, ctx: Browser | Page, script: str) -> Awaitable | None:
         return ctx.add_init_script(path=script)
 
-    async def allow_end_early(self, end_early_info: str = "==press a key to exit=="):
+    async def allow_end_early(self, end_early_str: str = "==press a key to exit=="):
         if not self.key_exit:
             return
 
         # not sure why but what i was prev using is broke:
-        # asyncio.to_thread(sys.stdout.write, end_early_info)
-        print(end_early_info)
+        # asyncio.to_thread(sys.stdout.write, end_early_str)
+        print(end_early_str)
 
         while line := await asyncio.to_thread(sys.stdin.readline):
             return await self.page.evaluate(self.end_early_js)
 
-    async def add_background_task(self, fn: Awaitable):
+    async def add_background_task(self, fn: Awaitable, name: str = None):
         task = asyncio.create_task(fn)
-        self.async_tasks[task.get_name()] = task
-        logger.info(f"added task {task.get_name()}")
+        name = name or task.get_name()
+        self.async_tasks[name] = task
+        logger.info(f"added task {name}")
 
     def _check_if_instance_properties(self, use_instance_properties: bool, **kwargs):
         if use_instance_properties:

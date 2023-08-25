@@ -4,7 +4,7 @@ import asyncio
 
 from os import environ
 
-from clippy.clippy_helper import ClippyHelper
+from clippy.clippy_helper import Clippy
 from clippy.constants import default_objective, default_start_page
 
 
@@ -47,7 +47,7 @@ def run():
 
     args = get_args()
 
-    clippy = ClippyHelper(objective=args.objective, headless=args.headless, start_page=args.start_page)
+    clippy = Clippy(objective=args.objective, headless=args.headless, start_page=args.start_page)
     clippy.check_command(cmd=args.cmd)
     return clippy
 

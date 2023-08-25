@@ -22,6 +22,9 @@ class Step(ModelBase):
 
     def __post_init__(self):
         if self.id is None:
+            # note: if a page updates and the url does not change then id will be same
+            # this will be an issue later. will have to resolve it by understanding when
+            # exactly to screenshot
             self.id = str(uuid.uuid5(uuid.NAMESPACE_URL, self.url))
 
     def __call__(self, action: Action, **kwargs):

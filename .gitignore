@@ -166,3 +166,4 @@ envrc
 ignore/
 data/
 tests/fixtures/
+test_output/

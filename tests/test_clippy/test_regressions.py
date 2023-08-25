@@ -57,7 +57,6 @@ class TestClippy(unittest.TestCase):
         elements = self.crawler.crawl()
 
 
-@unittest.skip("skipping crawler related")
 class TestSite(unittest.TestCase):
     def setUp(self):
         self.crawler = executor.Executor()

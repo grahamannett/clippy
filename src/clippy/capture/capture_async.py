@@ -1,21 +1,17 @@
 import asyncio
-import time
-import sys
 from typing import Coroutine
 
 from loguru import logger
-from playwright.async_api import ConsoleMessage, Frame, Page
+from playwright.async_api import ConsoleMessage, Frame, Page, Request
 
 from clippy.capture.capture import Capture, MachineCapture
 from clippy.crawler.crawler import Crawler
 from clippy.crawler.parser.dom_snapshot import DOMSnapshotParser
 from clippy.crawler.parser.playwright_strings import _parse_segment
-from clippy.crawler.states import Action, Click, Enter, Input, Step, Task, Wheel
+from clippy.states import Action, Click, Enter, Input, Step, Task, Wheel
 from clippy.crawler.tools_capture import _print_console
 from clippy.dm.data_manager import DataManager
 from clippy.instructor import Instructor
-from clippy.crawler.helpers import end_record, ainput
-import threading
 
 
 def _otherloaded(name: str):
@@ -47,9 +43,19 @@ async def catch_console_injections(msg: ConsoleMessage) -> Action:
     return action
 
 
-class CaptureAsync(Capture):
-    async_tasks = {}
+class ScreenshotHelper:
+    def __init__(self, crawler: Crawler):
+        self.crawler = crawler
+        self.captured_screenshot_ids = []
 
+    async def capture(self, page: Page):
+        pass
+
+    async def emit_done(self, page: Page):
+        await page.evaluate("console.log('screenshotEventDone')")
+
+
+class CaptureAsync(Capture):
     def __init__(
         self,
         objective: str = None,
@@ -60,70 +66,72 @@ class CaptureAsync(Capture):
         **kwargs,
     ) -> None:
         super().__init__(
-            objective=objective, start_page=start_page, data_manager=data_manager, use_llm=use_llm, *args, **kwargs
+            objective=objective,
+            start_page=start_page,
+            data_manager=data_manager,
+            use_llm=use_llm,
+            *args,
+            **kwargs,
         )
 
-        self.condition = asyncio.Condition()
-
         self.captured_screenshot_ids = []
+        self.captured_screenshot_urls = []
 
-    def _setup_coroutine(self, co: Coroutine):
-        self.async_tasks[co.__name__] = co
+    async def hook_dom_group(self, page: Page):
+        logger.info(f">=>PAGE-CHANGE|{page.url}")
+        await self.hook_update_task_new_page(page=page)
 
-    def setup_llm_suggest(self):
-        if self.use_llm:
-            self.instructor = Instructor()
-            self.dom_parser = DOMSnapshotParser(keep_device_ratio=False)
+        async with self.events["screenshot_event"]:
+            await self.hook_capture_screenshot(page=page)
 
     async def hook_update_task_new_page(self, page: Page):
-        logger.info(">=>PAGE-CHANGE")
-
-        async with self.condition:
-            await self.task.page_change_async(page=page)
-        # then we need to capture screenshot, since we use the task id for the name
-        # await self._capture_screenshots()
+        await self.task.page_change_async(page=page)
 
     async def hook_capture_screenshot(self, page: Page):
-        """take screenshot after page has loaded."""
-        await self.condition.wait_for(lambda: hasattr(self.task.curr_step, "id"))
-        async with self.condition:
-            # idk if this has ever happened but make sure we dont screenshot twice
+        self.captured_screenshot_urls.append(page.url)
 
-            if self.task.curr_step.id in self.captured_screenshot_ids:
-                return
+        if self.task.curr_step.id in self.captured_screenshot_ids:
+            return
 
-            path = f"{self.data_manager._curr_task_output}/{self.task.curr_step.id}.png"
-            self.task.curr_step.screenshot_path = path
-            await self.crawler.page.screenshot(path=path, full_page=True)
-            self.captured_screenshot_ids.append(self.task.curr_step.id)
+        path = f"{self.data_manager.curr_task_output}/{self.task.curr_step.id}.png"
+        self.task.curr_step.screenshot_path = path
+        await self.crawler.page.screenshot(path=path, full_page=True)
+        self.captured_screenshot_ids.append(self.task.curr_step.id)
 
     async def hook_console(self, msg: ConsoleMessage):
-        # action = await catch_console_injections(msg)
-        # if action:
-        #     self.task(action)
         if action := await catch_console_injections(msg):
             self.task(action)
 
+    async def hook_request_navigation_response(request: Request):
+        if request.is_navigation_request():
+            pass
+
     def setup_page_hooks(self, page: Page):
+        # first create events that hooks may need
+        self.events["screenshot_event"] = asyncio.Condition()
+
         # this captures actions from injections
         page.on("console", self.hook_console)
         # this one captures the page change
-        page.on("domcontentloaded", self.hook_update_task_new_page)
-        page.on("domcontentloaded", self.hook_capture_screenshot)
+        page.on("domcontentloaded", self.hook_dom_group)
 
-    async def start(self, crawler: Crawler, start_page: str = None, pause: bool = True):
+    async def start(self, crawler: Crawler, start_page: str = None) -> Page:
         self.crawler = crawler
 
+        logger.info("crawler start...")
         page = await crawler.start(key_exit=True)
+        logger.info("add background tasks...")
         await crawler.add_background_task(crawler.allow_end_early())
 
+        logger.info("setup page hooks...")
         self.setup_page_hooks(page=page)
 
-        await page.goto(start_page)
+        if start_page:
+            # think this might fuck up the capture
+            logger.info("going to start page")
+            await page.goto(start_page)
 
-        if pause:  # you wont pause if its a replay/headless
-            await page.pause()
-        # breakpoint()
+        return page
 
 
 class HumanCaptureAsync(CaptureAsync):
