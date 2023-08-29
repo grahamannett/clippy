@@ -1,0 +1,11 @@
+Transform the input string into a JSON object, ensure that the output keys are only one of `action`, `locator`,
+`action_args`.
+examples:
+input: 'click [button 7 ComboBox]'
+output: {"action": "click", "locator": 7}
+--
+input: 'type buy bodywash into input 9'
+output: {"action": "type", "locator": 9, "action_args": "buy bodywash"}
+--
+input: {{ generated_action }}
+output:

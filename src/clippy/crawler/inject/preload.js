@@ -76,7 +76,6 @@ var makeTrackInput = function (INPUT_TYPE) {
         element.offsetTop
       )
     } else {
-      // console.log(CATCH_FLAG, FAIL_FLAG, INPUT_TYPE, inputEvent.target.value)
       _fail(INPUT_TYPE, inputEvent.target.value)
     }
   }
@@ -89,8 +88,13 @@ var trackClick = function (inputEvent) {
   const clickX = inputEvent.x
   const clickY = inputEvent.y
 
-  const selectorVal = playwright.selector(inputEvent.target)
-  const pythonLocator = playwright.generateLocator(inputEvent.target, "python")
+  if (typeof playwright === "undefined") {
+    selectorVal = getSelector(inputEvent.target)
+    pythonLocator = "playwrightUndefined"
+  } else {
+    selectorVal = playwright.selector(inputEvent.target)
+    pythonLocator = playwright.generateLocator(inputEvent.target, "python")
+  }
 
   const boundingBox = {
     ...inputEvent.target.getBoundingClientRect().toJSON(),
@@ -145,8 +149,7 @@ function debounceEvent(func, delay, trackKey, keys) {
 // document.addEventListener("change", makeTrackInput("Change"))
 window.addEventListener("input", makeTrackInput("Input"))
 window.addEventListener("click", trackClick)
-// window.addEventListener("keydown", trackEnter)
-document.addEventListener("keydown", trackEnter)
+document.addEventListener("keydown", trackEnter) // do this on document not window
 
 // need debounce for these events
 // document.addEventListener(

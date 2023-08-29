@@ -2,7 +2,7 @@ import sys
 import re
 from dataclasses import dataclass
 from typing import Iterator, List, Any, Dict, Tuple
-from asyncio import gather
+import asyncio
 from playwright.async_api import CDPSession, Page, Locator
 
 from clippy.crawler.crawler import Crawler
@@ -43,12 +43,32 @@ black_listed_elements = set(
 TYPEABLE = ["input", "select"]
 CLICKABLE = ["link", "button"]
 
+ACTIONS = {}
+
+
+def element_allowed(element: str):
+    for t in TYPEABLE + CLICKABLE:
+        if t in element:
+            return True
+    return False
+
 
 def filter_page_elements(elements: List[str]) -> Iterator[str]:
     for element in elements:
-        for t in TYPEABLE + CLICKABLE:
-            if t in element:
-                yield element
+        if element_allowed(element):
+            yield element
+
+
+def get_action_type(element: str) -> str:
+    for t in TYPEABLE:
+        if t in element:
+            return "type"
+
+    for t in CLICKABLE:
+        if t in element:
+            return "click"
+
+    raise ValueError(f"Could not find action type for {element}")
 
 
 def convert_name(node_name: str, has_click_handler: bool):
@@ -58,6 +78,8 @@ def convert_name(node_name: str, has_click_handler: bool):
         return node_name
     elif node_name in "button" or has_click_handler:  # found pages that needed this quirk
         return "button"
+    elif node_name == "textarea":
+        return "input"
     else:
         return "text"
 
@@ -154,52 +176,19 @@ def _out_of_viewport_element(element_buffer: Dict[str, Any], page_viewport: Dict
     return ElementOutOfViewport((scroll_x, scroll_y), (el_x, el_y, el_w, el_h))
 
 
-def _get_loc_helper(element_buffer: Dict[str, Any], page: Page):
-    origin_x, orgin_y, center_x, center_y = (
-        element_buffer["origin_x"],
-        element_buffer["origin_y"],
-        element_buffer["center_x"],
-        element_buffer["center_y"],
-    )
-
-    x = origin_x + center_x
-    y = orgin_y + center_y
-
-    loc = page.locator(f"pos={x},{y}")
-    return loc
+class Locators:
+    ElementOutOfViewport = ElementOutOfViewport
+    Locator = Locator
 
 
-async def _get_from_location_async(element_buffer: dict, page: Page) -> Locator | ElementOutOfViewport:
-    loc = _get_loc_helper(element_buffer, page)
-    if await loc.count() == 0:
-        return _out_of_viewport_element(element_buffer, page.viewport_size)
-
-    return loc
-
-
-class TreeParser:
-    def __init__(self, *args, **kwargs):
-        pass
-
-    @classmethod
-    def from_tree_json(cls, json_filepath: str, *args, **kwargs):
-        with open(tree_json, "r") as f:
-            tree = json.load(f)
-
-        inst = cls(*args, **kwargs)
-        elements_of_interest = inst.prase_tree(tree)
-        page_element_buffer = inst.page_element_buffer
-        return elements_of_interest, page_element_buffer
-
-
-class DOMSnapshotParser(TreeParser):
+class DOMSnapshotParser:
     cdp_snapshot_kwargs = {
         "computedStyles": ["display"],
         "includeDOMRects": True,
         "includePaintOrder": True,
     }
 
-    def __init__(self, keep_device_ratio: bool = False, crawler: Crawler = None, *args, **kwargs):
+    def __init__(self, crawler: Crawler = None, keep_device_ratio: bool = False, *args, **kwargs):
         super().__init__()
         self.keep_device_ratio = keep_device_ratio
         self.page_element_buffer = {}
@@ -207,19 +196,11 @@ class DOMSnapshotParser(TreeParser):
 
         # allow for crawler to be passed for dev purposes
         self.crawler = crawler
+        self.page = crawler.page
+        self.cdp_client = crawler.cdp_client
         self._current_url = None
 
-    def _page_sizes(self, page: Page):
-        device_pixel_ratio = page.evaluate("window.devicePixelRatio")
-        win_scroll_x = page.evaluate("window.scrollX")
-        win_scroll_y = page.evaluate("window.scrollY")
-        win_upper_bound = page.evaluate("window.pageYOffset")
-        win_left_bound = page.evaluate("window.pageXOffset")
-        win_width = page.evaluate("window.screen.width")
-        win_height = page.evaluate("window.screen.height")
-        return (device_pixel_ratio, win_scroll_x, win_scroll_y, win_upper_bound, win_left_bound, win_width, win_height)
-
-    async def _page_sizes_async(self, page: Page):
+    async def _page_sizes(self, page: Page):
         device_pixel_ratio = await page.evaluate("window.devicePixelRatio")
         win_scroll_x = await page.evaluate("window.scrollX")
         win_scroll_y = await page.evaluate("window.scrollY")
@@ -229,14 +210,39 @@ class DOMSnapshotParser(TreeParser):
         win_height = await page.evaluate("window.screen.height")
         return (device_pixel_ratio, win_scroll_x, win_scroll_y, win_upper_bound, win_left_bound, win_width, win_height)
 
-    async def _get_from_location_async(self, element_buffer: dict, page: Page):
-        return await _get_from_location_async(element_buffer, page)
-
-    async def get_locators_async(self):
-        locators = await gather(
-            *[_get_from_location_async(self.page_element_buffer[i], self.crawler.page) for i in self.ids_of_interest]
+    def get_loc_helper(self, element_buffer: Dict[str, Any]) -> Locator:
+        origin_x, orgin_y, center_x, center_y = (
+            element_buffer["origin_x"],
+            element_buffer["origin_y"],
+            element_buffer["center_x"],
+            element_buffer["center_y"],
         )
+
+        x = origin_x + center_x
+        y = orgin_y + center_y
+
+        loc = self.page.locator(f"pos={x},{y}")
+        return loc
+
+    async def find_locators(self) -> list[Locator | ElementOutOfViewport]:
+        viewport_size = self.page.viewport_size
+
+        async def _fn(element_buffer: dict) -> Locator | ElementOutOfViewport:
+            loc = self.get_loc_helper(element_buffer)
+            return loc if (await loc.count() > 0) else _out_of_viewport_element(element_buffer, viewport_size)
+
+        locators = await asyncio.gather(*[_fn(self.page_element_buffer[i]) for i in self.ids_of_interest])
         return locators
+
+    async def get_locator(self, element: str, element_id: int) -> Locator | ElementOutOfViewport:
+        if not element_allowed(element):
+            return None
+        element_buffer = self.page_element_buffer[element_id]
+        loc = self.get_loc_helper(element_buffer)
+        if await loc.count() <= 0:
+            return _out_of_viewport_element(element_buffer, self.page.viewport_size)
+
+        return loc
 
     def need_crawl(self, page: Page):
         if not isinstance(
@@ -251,28 +257,17 @@ class DOMSnapshotParser(TreeParser):
         return False
 
     async def get_tree(self):
-        return await self.crawler.cdp_client.send(
+        self.tree = await self.crawler.cdp_client.send(
             "DOMSnapshot.captureSnapshot",
             self.cdp_snapshot_kwargs,
         )
 
-    async def parse(self):
-        self.tree = await self.get_tree()
-        tree = self.tree
-        page = self.crawler.page
+    async def parse(self) -> List[str]:
+        await self.get_tree()
+        pixel_ratio, win_s_x, win_s_y, upper_b, lower_b, win_w, win_h = await self.crawler.page_size()
+        self.parse_tree(self.tree, upper_b, win_w, lower_b, win_h, pixel_ratio)
 
-        (
-            device_pixel_ratio,
-            win_scroll_x,
-            win_scroll_y,
-            win_up_bound,
-            win_le_bound,
-            win_w,
-            win_h,
-        ) = await self._page_sizes_async(page)
-        elements_of_interest = self.parse_tree(tree, win_up_bound, win_w, win_le_bound, win_h, device_pixel_ratio)
-        self.elements_of_interest = elements_of_interest
-        return elements_of_interest
+        return self.elements_of_interest
 
     def parse_tree(
         self,
@@ -284,6 +279,12 @@ class DOMSnapshotParser(TreeParser):
         device_pixel_ratio: int = 1,
         platform: str = "darwin",
     ):
+        """
+        returns:
+            elements_of_interest: List[str] - list of strings that are of some form like
+                ['button 1 hnname', 'link 2 "Hacker News"', 'link 3 "new"', 'text 4 "|"', ... ]
+            ids_of_interest: List[ids] - list of ids of elements_of_interest that map to page_element_buffer
+        """
         page_element_buffer = self.page_element_buffer
 
         page_state_as_text = []
@@ -294,7 +295,7 @@ class DOMSnapshotParser(TreeParser):
             and not self.keep_device_ratio
         ):  # lies
             device_pixel_ratio = 2
-        # device_pixel_ratio = 2
+            # device_pixel_ratio = 1
 
         win_right_bound = win_left_bound + win_width * 2
         win_lower_bound = win_upper_bound + win_height * 2
@@ -526,7 +527,7 @@ class DOMSnapshotParser(TreeParser):
         ids_of_interest = []
         elements_locator = {}
         id_counter = 0
-
+        flagg = False
         for e_idx, element in enumerate(elements_in_view_port):
             node_index = element.get("node_index")
             node_name = element.get("node_name")
@@ -538,8 +539,6 @@ class DOMSnapshotParser(TreeParser):
             center_y = element.get("center_y")
             meta_data = element.get("node_meta")
             bounds = element.get("bounds")
-            # if id_counter == 5:
-            #     breakpoint()
 
             inner_text = f"{node_value} " if node_value else ""
             meta = ""
@@ -552,13 +551,11 @@ class DOMSnapshotParser(TreeParser):
                     if entry_type == "attribute":
                         entry_key = child.get("key")
                         _append_str = f'{entry_key}="{entry_value}"'
-                        # print("adding attribute", _append_str)
                         meta_data.append(_append_str)
                     else:
                         inner_text += f"{entry_value} "
 
             if len(meta_data) > 2 or inner_text != "":
-                # print("metadata", meta_data)
                 meta_data = list(filter(lambda x: not re.match('(class|id)=".+"', x), meta_data))
 
             if meta_data:
@@ -594,7 +591,7 @@ class DOMSnapshotParser(TreeParser):
                 to_append = f"""{converted_node_name} {id_counter}{meta} \"{inner_text}\""""
                 elements_of_interest.append(to_append)
                 ids_of_interest.append(id_counter)
-            elif converted_node_name in ["input", "button"] or "alt" in meta:
+            elif converted_node_name in ["input", "button", "textarea"] or "alt" in meta:
                 to_append = f"""{converted_node_name} {id_counter}{meta}"""
                 elements_of_interest.append(to_append)
                 ids_of_interest.append(id_counter)
@@ -603,12 +600,10 @@ class DOMSnapshotParser(TreeParser):
                 elements_of_interest.append(to_append)
                 ids_of_interest.append(id_counter)
             else:
-                pass
                 # print(f"""{converted_node_name} {id_counter}{meta}""")
+                pass  # pass so id counter is still incremented
                 # continue
-
             id_counter += 1
 
-        self.elements_of_interest = elements_of_interest
-        self.ids_of_interest = ids_of_interest
+        self.elements_of_interest, self.ids_of_interest = elements_of_interest, ids_of_interest
         return elements_of_interest, ids_of_interest
