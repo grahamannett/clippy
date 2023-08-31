@@ -30,8 +30,6 @@ class TestController(unittest.TestCase):
         elements_list = ["gah", "horr", "nothing"]
         elements = {"var1": elements_list}
 
-        scores = lm_controller.score_elements(str_template, elements=elements)
-
         arg_ = argmax(scores)
         highest_elem = elements_list[arg_]
 
@@ -41,7 +39,7 @@ class TestController(unittest.TestCase):
 
 
 class TestClippy(unittest.TestCase):
-    def setUp(self) -> None:
+    def setUp(self):
         self.objective = objective = ("where can i find the rules for hacker news",)
         self.page_url = "https://news.ycombinator.com/newsfaq.html"
 

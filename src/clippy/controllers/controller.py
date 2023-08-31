@@ -49,7 +49,7 @@ class Controller:
         return getattr(self.client, name)
 
     def _check(self):
-        if self.model is None:
+        if self.conf.model is None:
             print("WARNING: Model not set, probably needed for api")
 
     async def generate(self, prompt: str, *args, **kwargs):
@@ -61,14 +61,13 @@ class Controller:
     def pick_action(self, template: Template, options: List[Dict[str, str]]):
         raise NotImplementedError
 
-    async def score_actions(self, str_template: Template, options: List[Dict[str, str]], **kwargs):
-        opt_strs = str_template.map(options, **kwargs)
-
+    async def score_options(self, options: List[str], **kwargs):
         scores = await asyncio.gather(
-            *[await self.generate(prompt=opt, max_tokens=0, return_likelihoods="ALL") for opt in opt_strs]
+            *[self.generate(prompt=opt, max_tokens=0, return_likelihoods="ALL") for opt in options]
         )
-
-        return [{**options[i], "score": s[0].likelihood} for i, s in enumerate(scores)]
+        return scores
+        # not sure if i should clean the response or not
+        # return [{"score": s[0].likelihood, "response": s} for i, s in enumerate(scores)]
 
     def next_action(self, elements: List[str]):
         state = StubTemplates.state

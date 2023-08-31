@@ -44,6 +44,7 @@ class StubTemplates:
     examples_prompt = StubHelper.get_template("examples_prompt.jinja")
     message = StubHelper.get_template("message.jinja")
     state = StubHelper.get_template("state.jinja")
+    transform_generation = StubHelper.get_template("transform_generation.jinja")
 
 
 if __name__ == "__main__":

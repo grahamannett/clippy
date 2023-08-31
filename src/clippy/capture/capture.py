@@ -20,6 +20,8 @@ class Capture:
         task: Task = None,
         data_manager: DataManager = None,
         use_llm: bool = False,
+        print_injection: bool = True,
+        clippy: "Clippy" = None,
     ) -> None:
         self.objective = objective
         self.start_page = start_page
@@ -30,6 +32,8 @@ class Capture:
         self.ss_match = ScreenshotMatcher()
 
         self.use_llm = use_llm
+        self.print_injection = print_injection
+        self.clippy = clippy
 
     def _input(self, text: str):
         # used for mocking input
@@ -70,7 +74,7 @@ class MachineCapture(Capture):
 
     def execute_wheel(self, action: Actions.Wheel, page: Page, increm: int = 250, **kwargs) -> Awaitable[None] | None:
         # TODO: I dont think this works if there is peripheral scrolling.  NEED TO TEST
-        page_x, page_y = page.viewport_size["width"], page.viewport_size["height"]
+        x, y = page.viewport_size["width"], page.viewport_size["height"]
         final_X = action.deltaX
         final_Y = action.deltaY
 

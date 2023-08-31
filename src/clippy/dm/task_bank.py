@@ -1,75 +1,82 @@
 import random
 from pathlib import Path
+from itertools import cycle
 
-from clippy.states import Task
+from jinja2 import Environment
 
-task_bank_dir = "clippy/taskgen/"
+from collections import UserDict, UserList
 
-
-def _process_word_bank(word_bank: str):
-    pass
-
-class WordBank:
-    def __init__(self, template_var: str):
-        self.template_var = template_var
+task_bank_dir = "src/taskgen/wordbank"
+task_base_format = "_base"
+word_bank_format = "_bank"
 
 
+def _process_word_bank(word_bank: str) -> list[str]:
+    with open(word_bank) as f:
+        words_raw = f.read().splitlines()
+    return words_raw
 
 
-class WordBanks:
-    def __init__(self) -> None:
-        pass
-
-class TaskTemplate:
-    def __init__(self, objective: str, word_bank: WordBank):
-        objective = self.clean_objective(objective)
-        self.objective = objective
-
-        self.process_objective()
-
-    def clean_objective(self, objective: str) -> str:
-        objective = objective.lstrip("- ")
-        return objective
-
-    def process_objective(self):
-        # find all
-        pattern =
+class Words(UserList):
+    def __init__(self, words: list[str] = [], word_var: str = None):
+        super().__init__(words)
+        self.word_var = word_var
 
     def sample(self):
-        pass
+        return random.choice(self)
+
+    @classmethod
+    def from_file(cls, file: Path):
+        if isinstance(file, str):
+            file = Path(file)
+
+        word_var = file.name.split(word_bank_format)[0]
+        return cls(_process_word_bank(file), word_var)
+
+
+class WordBank(UserDict):
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+
+    def __getattr__(self, key):
+        return self[key].sample()
 
 
 class TaskBankManager:
-    task_base_format = "-base"
-    word_bank_format = "-bank"
-
     def __init__(self, task_bank_dir: str = task_bank_dir):
         self.task_bank_dir = task_bank_dir
         self.tasks = []
-
-    def process_task_bank(self):
-        with open(f"{self.task_bank_dir}/task{self.task_base_format}") as f:
-            tasks_raw = f.read().splitlines()
-
-        # task_templates = []
-
-        # for task in tasks:
-        #     task = task.lstrip("- ")
-        #     task = TaskTemplate(objective=task)
-        #     # task = Task(objective=task)
-        #     task_templates.append(task)
-
-        task_templates = [TaskTemplate(task, wb) for task in tasks_raw]
-
-        self.tasks = task_templates
-
-    def _get_word_banks(self):
-        for file in Path(self.task_bank_dir).iterdir():
-            if file.name.endswith("-bank") and file.name != "task-bank":
-                yield _process_word_bank(file)
+        self.wordbank = WordBank()
 
     def __len__(self):
         return len(self.tasks)
 
-    def sample_task(self):
-        return random.choice(self.tasks)
+    def __iter__(self):
+        self._task_iter = cycle(self.tasks)
+        return self
+
+    def __next__(self):
+        task = next(self._task_iter)
+        return task.render(wordbank=self.wordbank)
+
+    def process_task_bank(self):
+        self._process_word_banks()
+
+        self.task_templates_file = f"{self.task_bank_dir}/task{task_base_format}"
+        with open(self.task_templates_file) as f:
+            tasks_raw = f.read().splitlines()
+
+        self.tasks_raw = tasks_raw
+
+        for task in self.tasks_raw:
+            template = Environment().from_string(task)
+            self.tasks.append(template)
+
+    def _process_word_banks(self):
+        for file in Path(self.task_bank_dir).iterdir():
+            if file.name.endswith(word_bank_format):
+                words = Words.from_file(file)
+                self.wordbank[words.word_var] = words
+
+    def sample(self):
+        return random.choice(self.tasks).render(wordbank=self.wordbank)

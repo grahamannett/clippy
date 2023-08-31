@@ -1,13 +1,15 @@
 import asyncio
 from dataclasses import dataclass
-from distutils.util import strtobool
 from os import environ
-from typing import List
+from typing import List, Optional
+import json
+from loguru import logger
+import cohere
 
 from playwright.async_api import Locator, Page
-from playwright.sync_api import Locator as LocatorSync
 
-from clippy.controllers.apis.cohere_controller import CohereController
+from clippy.controllers.apis.cohere_controller import CohereController, Responses
+from clippy.crawler.parser.dom_snapshot import get_action_type
 from clippy.stubs.stubs import StubHelper, StubTemplates
 
 action_options = [{"next_command": "click"}, {"next_command": "type"}]
@@ -15,15 +17,14 @@ action_options = [{"next_command": "click"}, {"next_command": "type"}]
 
 # these are dataclasses rather than named tuple so I can attach objects to them
 @dataclass
-class ScoredNextAction:
-    next_command: str
-    score: float
+class NextAction:
+    action: str
+    locator: Locator = None
+    locator_id: int = None
+    action_args: str = None
 
-
-@dataclass
-class ScoredActionTarget:
-    target: str
-    score: float
+    # needed if we score all actions
+    score: float = None
 
 
 class Instructor:
@@ -34,130 +35,146 @@ class Instructor:
         self.use_llm = use_llm
 
         self.lm_controller = CohereController()
-        self.enable_threadpool: bool = bool(strtobool(environ.get("ENABLE_TP", "True")))
 
-    async def compare_all_page_elements(
+    async def score_actions(
         self,
+        elements: List[str],
         objective: str,
-        page_elements: List[str] = None,
-        url: str = None,
-        return_sorted: bool = False,
-    ) -> List[ScoredNextAction]:
+        url: str,
+        previous_commands: List[str] = None,
+        locators: List[Locator] = [],
+    ) -> List[NextAction]:
         """given the page state, compare all page elements against the objective
         Args:
             objective (str): current objective
         """
 
-        state_text = StubTemplates.state(
+        # state could be combined into prompt.render but seperate to allow examing state
+        state = StubTemplates.state.render(
             objective=objective,
             url=url,
-            browser_content="\n".join([f"- {el}" for el in page_elements]),
-            previous_commands="None",
+            browser_content=elements,
+            previous_commands=previous_commands,
         )
 
-        options = [{"next_command": e} for e in page_elements]
-        scored_opts = await self.lm_controller.score_actions(
-            str_template=StubTemplates.prompt, options=options, state=state_text
-        )
-        scored_opts = [ScoredNextAction(**opt) for opt in scored_opts]
+        async def score_fn(el, idx):
+            action_type = get_action_type(el)
+            next_command = f"{action_type} - {el}"
+            prompt = StubTemplates.prompt.render(state=state, next_command=next_command)
+            score = await self.lm_controller.generate(prompt=prompt, max_tokens=0, return_likelihoods="ALL")
+            action = NextAction(action=action_type, score=score[0].likelihood, action_args=el)
+            if locators:
+                action.locator = locators[idx]
+            return action
 
-        if return_sorted:
-            scored_opts = sorted(scored_opts, key=lambda x: x.score, reverse=True)
+        return await asyncio.gather(*[score_fn(el, idx) for idx, el in enumerate(elements)])
 
-        return scored_opts
-
-    def predict_next_action(self, page_state, objective: str) -> List[ScoredNextAction]:
-        """given the state, predict the next action (click/type/etc)"""
-
-        state_text = StubTemplates.state(
-            objective=objective,
-            url=page_state.url,
-            browser_content="\n".join([f"- {el}" for el in page_state.page_elements]),
-            previous_commands="None",
-        )
-
-        scored_opts = self.lm_controller.score_actions(
-            str_template=StubTemplates.prompt, options=action_options, state=state_text
-        )
-        scored_opts = sorted([ScoredNextAction(**opt) for opt in scored_opts], key=lambda x: x.score, reverse=True)
-        return scored_opts
-
-    def predict_action_target(
+    async def generate_next_action(
         self,
-        action: str,
+        elements: List[str],
         objective: str,
-        page_state=None,
-        url: str = None,
-        page_elements: List[str] = None,
-    ) -> List[ScoredActionTarget]:
-        filtered_page_elements = list(filter_page_elements(action, page_state.page_elements))
-        browser_content = "\n".join([f"- {el}" for el in filtered_page_elements])
-
-        state_text = StubTemplates.state(
+        url: str,
+        previous_commands: List[str] = None,
+        max_tokens: int = 150,
+        num_generations: int = 1,
+        return_likelihoods: str = "GENERATION",
+        temperature: float = 0.25,
+    ) -> Responses.Generations:
+        """given the page state, generate the next action, this is more ideal than scoring all actions"""
+        prompt = StubTemplates.prompt.render(
             objective=objective,
-            url=page_state.url,
-            browser_content=browser_content,
-            previous_commands="None",
+            url=url,
+            browser_content=elements,
+            previous_commands=previous_commands,
+        )
+        response = await self.lm_controller.generate(
+            prompt=prompt,
+            max_tokens=max_tokens,
+            num_generations=num_generations,
+            return_likelihoods=return_likelihoods,
+            temperature=temperature,
+        )
+        return response
+
+    async def transform_action(
+        self,
+        generated_action: str,
+        locators: List[Locator],
+        num_generations: int = 5,
+        temperature: float = 0.25,
+        **kwargs,
+    ) -> NextAction:
+        """given a generated action str, transform it into a valid action
+        meaning it has an action type, an id/locator, and a value if needed
+        """
+        next_action = None
+        prompt = StubTemplates.transform_generation.render(generated_action=generated_action)
+        response = await self.lm_controller.generate(
+            prompt=prompt,
+            max_tokens=200,
+            return_likelihoods="GENERATION",
+            num_generations=num_generations,
+            temperature=temperature,
+            **kwargs,
         )
 
-        next_command = action + " ${target}"
-        target_template = StubHelper.template(StubTemplates.prompt(state=state_text, next_command=next_command))
-        options = [{"target": t} for t in filtered_page_elements]
+        # give multiple tries to get a valid response
+        for resp in response:
+            try:
+                # should be similar to {"action": "type", "locator": 9, "action_args": "buy bodywash"}
+                resp_dict = json.loads(resp.text)
+                locator_id = resp_dict.pop("locator")
 
-        if len(options) > 1:
-            scored_opts = self.lm_controller.score_actions(
-                str_template=target_template, options=options, state=state_text
-            )
-        else:
-            scored_opts = [{"target": options[0]["target"], "score": 1.0}]
+                next_action = NextAction(
+                    action=resp_dict.pop("action"),
+                    locator=locators[locator_id],
+                    locator_id=locator_id,
+                    score=resp.likelihood,
+                    action_args=resp_dict.pop("action_args", None),
+                )
+                breakpoint()
 
-        scored_opts = sorted([ScoredActionTarget(**opt) for opt in scored_opts], key=lambda x: x.score, reverse=True)
-        return scored_opts
+                if len(resp_dict) > 0:
+                    logger.warning("resp has more keys than we expected")
+                    breakpoint()
+                return next_action
+            except json.decoder.JSONDecodeError or KeyError:
+                logger.error(f"resp isn't json decodable: {resp[0].text}")
+                continue
+            except KeyError:
+                logger.error(f"resp isn't doesnt have Keys we need: {resp_dict}")
+                continue
 
-    def predict_target_cmd(self, objective: str, next_cmd: List[str], page_state) -> str:
-        # if its a type command, then we need to ask for the value
+        return next_action
 
-        browser_content = "\n".join([f"- {el}" for el in page_state.page_elements])
-        state_text = StubTemplates.state(
-            objective=objective, url=page_state.url, browser_content=browser_content, previous_commands="None"
+    async def match_generated_output(self, text: str, elements: List[str]) -> int:
+        """given a generated text, match it to an element on the page"""
+
+        for i, el in enumerate(elements):
+            if el in text:
+                return i
+
+        return None
+
+    async def _find_action_from_elems(self, elems: List[str], locators: List[str]):
+        next_action = await self.score_actions(
+            elems,
+            self.objective,
+            url=self.crawler.page.url,
+            locators=locators,
         )
-        next_command = " ".join(next_cmd) + "\nValue:"
+        scored = await self.score_actions(elems, self.objective, url=self.crawler.page.url)
+        # top action
+        logger.info(f"top action: {scored[0]}")
+        for i, score in enumerate(scored):
+            score.locator = locators[i]
 
-        prompt_str = StubTemplates.prompt(state=state_text, next_command=next_command)
-        _generated_text = self.lm_controller.generate(prompt_str, max_tokens=10, temperature=0.5, num_generations=1)
-        generated_text = str(generated_text[0]).lstrip()
-        return generated_text
+        scored = sorted(scored, key=lambda x: x.score, reverse=True)
 
-    async def llm_assist_hook(self, page: Page):
-        if not self.use_llm:
-            return
+        # matched_idx = await instructor.match_generated_output(generated_action[0].text, elems)
 
-        if (elements_of_interest := await self._get_elements_of_interest(self.cdp_client, page)) == []:
-            print("tried to crawl but didnt work...")
-            return
+        # if matched_idx:
+        #     _elem = elems[matched_idx]
+        #     _locator = locators[matched_idx]
 
-        # elements_of_interest = await self.dom_parser.crawl_async(self.cdp_client, page)
-        element_buffer = self.dom_parser.page_element_buffer
-        ids_of_interest = self.dom_parser.ids_of_interest
-
-        if not ids_of_interest:
-            print("no elements of interest, skipping...")
-            return
-
-        locators = await asyncio.gather(
-            *[
-                self.dom_parser._get_from_location_async(element_buffer[i], page)
-                for idx, i in enumerate(ids_of_interest)
-            ]
-        )
-
-        # TODO: shorten it for time being
-        elements_of_interest = elements_of_interest[:50]
-        scored_elements = await self.instructor.compare_all_page_elements_async(
-            self.objective, page_elements=elements_of_interest, url=page.url
-        )
-
-        if not scored_elements:
-            breakpoint()
-
-        return await self.instructor.highlight_from_scored_async(scored_elements, locators=locators, page=page)
+        breakpoint()

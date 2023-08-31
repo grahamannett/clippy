@@ -52,20 +52,28 @@ class PosSelector(Selector):
 """
 
 
-pos_returner = """
+class GeneratedLocatorSelector(Selector):
+    name = "generated_locator"
+    script = """
 {
+    query(root, selector) {
+        if (typeof playwright === "undefined") {
+            console.log("cant get generated locator without playwright")
+            return
+        }
+        console.log("in query123")
+        let [x, y] = selector.split(",").map((v) => parseInt(v));
+        return playwright.generateLocator(document.elementFromPoint(x, y))
+    },
+
+    queryAll(root, selector) {
+        if (typeof playwright === "undefined") {
+            console.log("cant get generated locator without playwright-queryAll")
+            return
+        }
+        console.log("in queryAll")
+        let [x, y] = selector.split(",").map((v) => parseInt(v));
+        return Array.from(document.elementsFromPoint(x, y))
+    }
 }
 """
-
-
-# class SelectorExtension:
-#     tag_selector: str = tag_selector
-#     pos_selector: str = pos_selector
-
-#     @staticmethod
-#     def setup_tag_selectors(pw) -> List[Awaitable[None] | None]:
-#         selectors = [
-#             pw.selectors.register("tag", SelectorExtension.tag_selector),
-#             pw.selectors.register("pos", SelectorExtension.pos_selector),
-#         ]
-#         return selectors

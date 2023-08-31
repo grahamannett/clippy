@@ -10,18 +10,18 @@ const trackInfo = {
   },
 }
 
-function _transmitData(flag, ...args) {
-  console.log(CATCH_FLAG, flag, ...args)
+function _transmitData(flag, data) {
+  console.log(CATCH_FLAG, flag, JSON.stringify(data))
 }
 
-function _fail(...args) {
+function _fail(data) {
   const FLAG = "FAIL"
-  _transmitData(FLAT, ...args)
+  _transmitData(FLAT, args)
 }
 
-function _debug(...args) {
+function _debug(data) {
   const FLAG = "DEBUG"
-  _transmitData(FLAG, ...args)
+  _transmitData(FLAG, data)
 }
 
 function elemPositionDocument(el) {
@@ -57,7 +57,10 @@ function getSelector(elm) {
 function checkIfScrolled() {
   const INPUT_TYPE = "Wheel"
   if (window.scrollX != 0 || window.scrollY != 0) {
-    _transmitData(INPUT_TYPE, window.scrollX, window.scrollY)
+    _transmitData(INPUT_TYPE, {
+      delta_x: window.scrollX,
+      delta_y: window.scrollY,
+    })
   }
 }
 
@@ -68,15 +71,14 @@ var makeTrackInput = function (INPUT_TYPE) {
     var element = document.getElementById(elementId)
     if (element != null) {
       checkIfScrolled()
-      _transmitData(
-        INPUT_TYPE,
-        inputEvent.target.value,
+      _transmitData(INPUT_TYPE, {
+        value: inputEvent.target.value,
         // there is also element.offsetHeight, element.offsetWidth
-        element.offsetLeft,
-        element.offsetTop
-      )
+        x: element.offsetLeft,
+        y: element.offsetTop,
+      })
     } else {
-      _fail(INPUT_TYPE, inputEvent.target.value)
+      _fail(INPUT_TYPE, { value: inputEvent.target.value })
     }
   }
 }
@@ -85,8 +87,8 @@ var trackClick = function (inputEvent) {
   const INPUT_TYPE = "Click"
   // there are like 10 different options on this inputEvent and not sure which i should use:
   // pageX,pageY, clientX, clientY, offsetX, offsetY, x, y, screenX, screenY
-  const clickX = inputEvent.x
-  const clickY = inputEvent.y
+  const x = inputEvent.x
+  const y = inputEvent.y
 
   if (typeof playwright === "undefined") {
     selectorVal = getSelector(inputEvent.target)
@@ -103,20 +105,19 @@ var trackClick = function (inputEvent) {
   }
 
   checkIfScrolled()
-  _transmitData(
-    INPUT_TYPE,
-    clickX,
-    clickY,
-    selectorVal,
-    pythonLocator,
-    JSON.stringify(boundingBox)
-  )
+  _transmitData(INPUT_TYPE, {
+    x: x,
+    y: y,
+    selector: selectorVal,
+    python_locator: pythonLocator,
+    bounding_box: boundingBox,
+  })
 }
 
 var trackEnter = function (inputEvent) {
   const INPUT_TYPE = "Enter"
   if (inputEvent.code === "Enter") {
-    _transmitData(INPUT_TYPE, inputEvent.code)
+    _transmitData(INPUT_TYPE, { value: inputEvent.code })
   }
 }
 
@@ -125,12 +126,18 @@ var trackEnter = function (inputEvent) {
 // dont use this, theres too many events it will probably cause issues for playwright
 var trackWheelEventAll = function (inputEvent) {
   const INPUT_TYPE = "Wheel"
-  _transmitData(INPUT_TYPE, inputEvent.deltaX, inputEvent.deltaY)
+  _transmitData(INPUT_TYPE, {
+    delta_x: inputEvent.deltaX,
+    delta_y: inputEvent.deltaY,
+  })
 }
 
 function trackWheel(data) {
   const INPUT_TYPE = "Wheel"
-  _transmitData(INPUT_TYPE, trackInfo.wheel.deltaX, trackInfo.wheel.deltaY)
+  _transmitData(INPUT_TYPE, {
+    delta_x: trackInfo.wheel.deltaX,
+    delta_y: trackInfo.wheel.deltaY,
+  })
 }
 
 function debounceEvent(func, delay, trackKey, keys) {

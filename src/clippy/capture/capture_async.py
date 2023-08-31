@@ -1,5 +1,6 @@
 import asyncio
 from typing import Coroutine
+import json
 
 from loguru import logger
 from playwright.async_api import ConsoleMessage, Frame, Page, Request
@@ -8,21 +9,12 @@ from clippy.capture.capture import Capture, MachineCapture
 from clippy.crawler.crawler import Crawler
 from clippy.crawler.parser.dom_snapshot import DOMSnapshotParser
 from clippy.crawler.parser.playwright_strings import _parse_segment
-from clippy.states import Action, Click, Enter, Input, Step, Task, Wheel
+from clippy.states import Action, Actions, Click, Enter, Input, Step, Task, Wheel
 from clippy.crawler.tools_capture import _print_console
 from clippy.dm.data_manager import DataManager
 
 
-def _otherloaded(name: str):
-    """helper func for attaching to page events"""
-
-    async def _fn(*args, **kwargs):
-        logger.info(f"{name} event")
-
-    return _fn
-
-
-async def catch_console_injections(msg: ConsoleMessage) -> Action:
+async def catch_console_injections(msg: ConsoleMessage, print_injection: bool = True) -> Action:
     if not msg.text.startswith("CATCH"):
         return
 
@@ -31,14 +23,13 @@ async def catch_console_injections(msg: ConsoleMessage) -> Action:
     for arg in msg.args:
         values.append(await arg.json_value())
 
-    _print_console(*values, print_fn=logger.debug)
-    if values[1].lower() == "debug":
-        logger.debug("debugging...", *values)
-        return
+    if print_injection:
+        _print_console(*values, print_fn=logger.debug)
 
-    _, class_name, *data = values  # data is list of [CATCH, class_name, *data]
+    _, class_name, data = values  # data is list of [CATCH, class_name, *data]
+    data = json.loads(data)
 
-    action = Action[class_name](*data)
+    action = Actions[class_name](**data)
     return action
 
 
@@ -86,7 +77,7 @@ class CaptureAsync(Capture):
         self.captured_screenshot_ids.append(self.task.curr_step.id)
 
     async def hook_console(self, msg: ConsoleMessage):
-        if action := await catch_console_injections(msg):
+        if action := await catch_console_injections(msg, print_injection=self.print_injection):
             self.task(action)
 
     async def hook_request_navigation_response(request: Request):
@@ -106,9 +97,8 @@ class CaptureAsync(Capture):
         self.crawler = crawler
 
         logger.info("crawler start...")
-        page = await crawler.start(key_exit=True)
+        page = await crawler.start()
         logger.info("add background tasks...")
-        await crawler.add_background_task(crawler.allow_end_early())
 
         logger.info("setup page hooks...")
         self.setup_page_hooks(page=page)

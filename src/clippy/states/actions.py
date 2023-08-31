@@ -4,10 +4,7 @@ from dataclasses import asdict, dataclass
 
 import json
 from playwright.async_api import ConsoleMessage, Frame, Page
-from playwright.sync_api import Frame as FrameSync
-from playwright.sync_api import Page as PageSync
 
-from enum import Enum
 
 # NOTE: Using camelCase so it matches more closely with js
 
@@ -49,6 +46,12 @@ class Action:
 
 
 @dataclass
+class Position:
+    x: int | float = None
+    y: int | float = None
+
+
+@dataclass
 class BoundingBox:
     x: float
     y: float
@@ -83,15 +86,15 @@ class BoundingBox:
 
 @dataclass
 class Click(Action):
-    page_x: int = None
-    page_y: int = None
+    x: int = None
+    y: int = None
     selector: str = None
     python_locator: str = None
     bounding_box: BoundingBox | str = None
 
     def __post_init__(self):
         super().__post_init__()
-        self.position = (self.page_x, self.page_y)
+        self.position = Position(self.x, self.y)
 
         if self.bounding_box:
             if isinstance(self.bounding_box, str):
@@ -127,12 +130,12 @@ class Click(Action):
 @dataclass
 class Input(Action):
     value: str = None
-    page_x: int = None
-    page_y: int = None
+    x: int = None
+    y: int = None
 
     def __post_init__(self):
         super().__post_init__()
-        self.position = (self.page_x, self.page_y)
+        self.position = Position(self.x, self.y)
         self.allow_merge = True
 
     def update(self, action: "Input"):
@@ -149,8 +152,8 @@ class Enter(Action):
 
 @dataclass
 class Wheel(Action):
-    deltaX: int = None
-    deltaY: int = None
+    delta_x: int = None
+    delta_y: int = None
 
     def __post_init__(self):
         super().__post_init__()

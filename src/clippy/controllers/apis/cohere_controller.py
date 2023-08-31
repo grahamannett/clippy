@@ -1,22 +1,25 @@
-import asyncio
+from dataclasses import dataclass
 from os import environ
 from typing import Coroutine, List
 
 import cohere
-from cohere.responses import Embeddings, Generation, Generations
-
-from dataclasses import dataclass
+from cohere.client import Embeddings, Generations
+from loguru import logger
 
 from clippy.controllers.controller import Controller
-from clippy.controllers.utils import truncate_left
 
 AVAILABLE_MODELS = ["command-xlarge", "xlarge"]
 DEFAULT_SPECIAL_TOKENS_INTS = {13782: ["click"], 5317: ["type"]}
 
 
+class Responses:
+    Generations = Generations
+    Embeddings = Embeddings
+
+
 @dataclass
 class CohereConfig:
-    model: str = "command-nightly"
+    model: str = "command"
 
     class embed:
         model: str = "embed-english-v2.0"
@@ -24,7 +27,6 @@ class CohereConfig:
 
 
 class CohereController(Controller):
-    model: str = "command-nightly"
     conf: CohereConfig = CohereConfig()
     cohere_client = None  # make it possible to get client without instantiating controller
     client: cohere.AsyncClient
@@ -54,14 +56,13 @@ class CohereController(Controller):
         prompt: str = None,
         model: str = None,
         temperature: float = 0.5,
-        num_generations: int = 5,
+        num_generations: int = None,
         max_tokens: int = 20,
         stop_sequences: List[str] = None,
         return_likelihoods: str = "GENERATION",
-        truncate: str = "START",  # must be one of NONE/START/END
-        extra_print=False,
-        **kwargs,
-    ) -> cohere.client.Generations:
+        truncate: str = "NONE",  # must be one of NONE/START/END
+        # **kwargs,
+    ) -> Generations:
         # https://docs.cohere.com/reference/generate
         return await self.client.generate(
             prompt=prompt,
@@ -72,7 +73,7 @@ class CohereController(Controller):
             stop_sequences=stop_sequences,
             return_likelihoods=return_likelihoods,
             truncate=truncate,
-            **kwargs,
+            # **kwargs,
         )
 
     def get_special_tokens(self, tokens: List[str] = ["click", "type"]):

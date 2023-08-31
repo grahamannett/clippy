@@ -6,6 +6,7 @@ import asyncio
 from playwright.async_api import CDPSession, Page, Locator
 
 from clippy.crawler.crawler import Crawler
+from clippy.states.actions import Position
 
 black_listed_elements = set(
     [
@@ -43,7 +44,11 @@ black_listed_elements = set(
 TYPEABLE = ["input", "select"]
 CLICKABLE = ["link", "button"]
 
-ACTIONS = {}
+
+@dataclass
+class ElementOutOfViewport:
+    scroll: Tuple[int, int]
+    bounds: Tuple[int, int, int, int]
 
 
 def element_allowed(element: str):
@@ -143,12 +148,6 @@ def add_to_hash_tree(
     return value
 
 
-@dataclass
-class ElementOutOfViewport:
-    scroll: Tuple[int, int]
-    bounds: Tuple[int, int, int, int]
-
-
 def _out_of_viewport_element(element_buffer: Dict[str, Any], page_viewport: Dict[str, int]):
     # TODO factor in if scrollX, scrollY are not 0
 
@@ -222,17 +221,8 @@ class DOMSnapshotParser:
         y = orgin_y + center_y
 
         loc = self.page.locator(f"pos={x},{y}")
+        loc.position = Position(x, y)
         return loc
-
-    async def find_locators(self) -> list[Locator | ElementOutOfViewport]:
-        viewport_size = self.page.viewport_size
-
-        async def _fn(element_buffer: dict) -> Locator | ElementOutOfViewport:
-            loc = self.get_loc_helper(element_buffer)
-            return loc if (await loc.count() > 0) else _out_of_viewport_element(element_buffer, viewport_size)
-
-        locators = await asyncio.gather(*[_fn(self.page_element_buffer[i]) for i in self.ids_of_interest])
-        return locators
 
     async def get_locator(self, element: str, element_id: int) -> Locator | ElementOutOfViewport:
         if not element_allowed(element):

@@ -30,7 +30,7 @@ elements = [
 
 
 class TestController(unittest.IsolatedAsyncioTestCase):
-    def setUp(self) -> None:
+    def setUp(self):
         self.co = CohereController()
 
     async def asyncTearDown(self):

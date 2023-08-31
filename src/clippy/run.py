@@ -5,6 +5,8 @@ import asyncio
 from os import environ
 
 from clippy.clippy_helper import Clippy
+from clippy.dm.task_bank import TaskBankManager
+
 from clippy.constants import default_objective, default_start_page
 
 
@@ -21,7 +23,8 @@ def get_args():
     common.add_argument("--headless", action="store_true")
     common.add_argument("--exec_type", type=str, choices=["sync", "async"], default="async")
     common.add_argument("--start_page", type=str, default=default_start_page)
-    common.add_argument("-nc", "--no_confirm", action="store_true", default=False)
+    common.add_argument("--random_task", action="store_true", default=False)
+    common.add_argument("-nk", "--no_keyexit", action="store_true", default=False)
 
     parser = argparse.ArgumentParser(description="🤠 clippy")
 
@@ -47,14 +50,15 @@ def run():
 
     args = get_args()
 
-    clippy = Clippy(objective=args.objective, headless=args.headless, start_page=args.start_page)
+    clippy = Clippy(
+        objective=args.objective,
+        headless=args.headless,
+        start_page=args.start_page,
+        key_exit=not args.no_keyexit,
+    )
+
     clippy.check_command(cmd=args.cmd)
     return clippy
-
-    # response = clippy.start(args)
-
-    # if asyncio.iscoroutine(response):
-    #     asyncio.run(response)
 
 
 if __name__ == "__main__":

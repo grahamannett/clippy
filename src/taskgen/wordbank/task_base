@@ -1,8 +1,8 @@
-- Book a restaurant for ${wordbank.number} people at ${wordbank.timeslot} at ${wordbank.restaurant.city}.
-- What is the weather in ${wordbank.city}.
-- Find a nearby coffee shop in ${wordbank.city}.
-- Check the movie showtimes in ${wordbank.city}.
-- Search for flight options from ${wordbank.city.departure} to ${wordbank.city.arrival}.
-- Find and book a hotel for a weekend getaway in ${wordbank.city}.
-- Convert from [number] [currency] to [currency].
-- Look up recipes for [cuisine].
+Book a restaurant for {{ wordbank.number }} people at {{ wordbank.timeslot }} at {{ wordbank.restaurant }}.
+What is the weather in {{ wordbank.city }}.
+Find a nearby coffee shop in {{ wordbank.city }}.
+Check the movie showtimes in {{ wordbank.city }}.
+Search for flight options from {{ wordbank.city }} to {{ wordbank.city }}.
+Find and book a hotel for a weekend getaway in {{ wordbank.city }}.
+Convert from {{ wordbank.number }} {{ wordbank.currency }} to {{ wordbank.currency }}.
+Look up recipes for {{ wordbank.recipe }}.
