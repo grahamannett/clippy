@@ -48,6 +48,10 @@ class Crawler:
         await self._end_async()
 
     @property
+    def url(self):
+        return self.page.url
+
+    @property
     def pause_task(self) -> asyncio.Task:
         if (task := self.async_tasks["pause"]) is None:
             task = self.pause()

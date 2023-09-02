@@ -1,12 +1,5 @@
-You are an assisted web agent, given an objective help us find the most likely action to achieve that goal.
-Given the previous actions and the current browser content, what is the next action you would take? If none of the actions seem likely, give the action `scrolldown`.
-
-Actions are specified in the following format:
-    click [button X METADATA] - click on the element with id X and metadata METADATA
-    type [element X METADATA] [text] - type text into the element with id X and metadata METADATA
-    scrolldown - scroll down the page
-
-{% include 'examples_prompt.jinja' %}
+{% if header_prompt %}{{ header_prompt }}{% else %}{% include 'header_next_action.jinja' %}{% endif %}
+{% if not skip_available_actions %}{% include 'available_actions.jinja' %}{% include 'examples_prompt.jinja' %}{% endif %}
 {% if state %}{{ state }}{% else %}{% include 'state.jinja' %}{% endif %}
-Next Command:
-{{ next_command }}
+---
+{% if footer_prompt %}{{ footer_prompt }}{% else %}Next Command:{{ next_command }}{% endif %}

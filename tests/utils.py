@@ -1,6 +1,6 @@
-import threading
 import http.server
 import socketserver
+import threading
 
 
 class ServeSite:

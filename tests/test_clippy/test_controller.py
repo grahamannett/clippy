@@ -2,7 +2,9 @@ import unittest
 from os import environ
 
 from clippy.stubs import StubTemplates
-from clippy.controllers.apis.cohere_controller import CohereController
+from clippy.controllers import Controller
+from clippy.controllers.controller_config import ResponseConfig
+
 from clippy.crawler.parser.dom_snapshot import filter_page_elements
 
 elements = [
@@ -31,7 +33,7 @@ elements = [
 
 class TestController(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        self.co = CohereController()
+        self.co = Controller.Clients.Cohere()
 
     async def asyncTearDown(self):
         await self.co.close()
@@ -39,6 +41,12 @@ class TestController(unittest.IsolatedAsyncioTestCase):
     async def test_tokenize(self):
         co = self.co
         test_string = "tokenized string"
+        base_tokens = await co.tokenize(test_string)
+
+        ResponseConfig.return_raw = True
+
+        tokens = await co.tokenize(test_string)
+        breakpoint()
 
         tokens = (await co.tokenize(test_string)).tokens
         assert len(tokens) > 2
@@ -49,6 +57,7 @@ class TestController(unittest.IsolatedAsyncioTestCase):
         bad_string = (await co.detokenize(tokens=tokens + [9000])).text
 
         assert string != bad_string
+        breakpoint()
 
     async def test_controller_score(self):
         co = self.co

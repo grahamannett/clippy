@@ -49,6 +49,7 @@ class TestInstructor(unittest.IsolatedAsyncioTestCase):
         objective1 = "buy bodywash"
         objective2 = "buy shampoo"
         objective3 = "find a ticket for taylor swift concert"
+        controller = Controller.using_client(Controller.COHERE)
         client = CohereController.get_client_async(api_key=environ.get("COHERE_KEY"), check_api_key=True)
         controller = CohereController(client=client)
         _, obj, scores = await controller.find_most_similar_str(

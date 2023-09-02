@@ -8,7 +8,7 @@ from clippy.dm.db_utils import DatabaseConfig, DatabaseSetup
 
 
 class TestDatabase(unittest.IsolatedAsyncioTestCase):
-    def setUp(self) -> None:
+    def setUp(self):
         with open("tests/db_fixtures/responses/generate.json") as f:
             self.generation_meta = json.load(f)
         with open("tests/db_fixtures/responses/embed.json") as f:

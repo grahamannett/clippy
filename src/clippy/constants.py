@@ -11,3 +11,6 @@ TEMPLATES_DIR = "src/clippy/templates/"
 # clippy defaults
 default_start_page: str = "https://www.google.com"
 default_objective: str = "Enter an objective: "
+
+
+max_url_length = 100  # if None will print whole

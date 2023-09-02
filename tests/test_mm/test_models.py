@@ -10,6 +10,11 @@ class TestModel(unittest.IsolatedAsyncioTestCase):
         # Start the SimpleHTTPServer in a separate thread
         cls.server = ServeSite()
 
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.server.end()
+        return super().tearDownClass()
+
     async def test_example(self):
         # Use the server's address as the base URL for your Playwright tests
         async with async_playwright() as playwright:
@@ -17,7 +22,6 @@ class TestModel(unittest.IsolatedAsyncioTestCase):
             context = await browser.new_context()
             page = await context.new_page()
             await page.goto(f"http://localhost:{self.server.PORT}/tests/fixtures/sites/news.ycombinator.com/index.html")
-            await browser.close()
 
 
 if __name__ == "__main__":

@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 from typing import List
 
-from clippy.stubs.tasks_stubs import summary_stub
-
 import bs4
 from readability import Document
+
+# from clippy.stubs.tasks_stubs import summary_stub
 
 
 class LMTasks:

@@ -1,15 +1,13 @@
-Transform the input string into a JSON object, ensure that the output keys are only one of `action`, `locator`,
-`action_args`.
-examples:
---
-input: 'type buy bodywash into input 9'
-output: {"action": "type", "locator": 9, "action_args": "buy bodywash"}
+Transform the input string into a JSON object, ensure that the output keys are only one of "action", "locator", "action_args".
 ---
+input: 'type buy bodywash into input 9'
+output: {"action": "type", "element_id": 9, "action_args": "buy bodywash"}
+--
 input: 'click [button 7 ComboBox]'
-output: {"action": "click", "locator": 7}
+output: {"action": "click", "element_id": 7}
 --
 input: 'type [input 4 sDmgG search Search] "fork Boise Idaho"'
-output: {"action": "type", "locator": 4, "action_args": "fork Boise Idaho"}
----
+output: {"action": "type", "element_id": 4, "action_args": "fork Boise Idaho"}
+--
 input: {{ generated_action }}
 output:

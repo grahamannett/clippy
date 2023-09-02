@@ -224,6 +224,9 @@ class DOMSnapshotParser:
         loc.position = Position(x, y)
         return loc
 
+    def element_allowed(self, element: str):
+        return element_allowed(element)
+
     async def get_locator(self, element: str, element_id: int) -> Locator | ElementOutOfViewport:
         if not element_allowed(element):
             return None

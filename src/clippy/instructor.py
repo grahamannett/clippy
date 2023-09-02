@@ -19,8 +19,8 @@ action_options = [{"next_command": "click"}, {"next_command": "type"}]
 @dataclass
 class NextAction:
     action: str
+    element_id: int = None
     locator: Locator = None
-    locator_id: int = None
     action_args: str = None
 
     # needed if we score all actions
@@ -96,10 +96,53 @@ class Instructor:
         )
         return response
 
+    async def filter_actions(
+        self,
+        elements: List[str],
+        objective: str,
+        url: str,
+        max_elements: int = 20,
+        max_tries: int = 1,
+        previous_commands: List[str] = None,
+        max_tokens: int = 500,
+        num_generations: int = 1,
+        return_likelihoods: str = "GENERATION",
+        temperature: float = 0.0,
+    ):
+        filtered_elements = elements
+
+        while max_tries > 0 and len(filtered_elements) > max_elements:
+            max_tries -= 1
+
+            prompt = StubTemplates.prompt.render(
+                header_prompt=StubTemplates.header_filter_elements.render(max_elements=max_elements),
+                objective=objective,
+                url=url,
+                browser_content=filtered_elements,
+                previous_commands=previous_commands,
+                skip_available_actions=True,
+                element_prefix="- ",
+                footer_prompt="Filtered Browser Content:\n",
+            )
+
+            response = await self.lm_controller.generate(
+                prompt=prompt,
+                max_tokens=max_tokens,
+                num_generations=num_generations,
+                return_likelihoods=return_likelihoods,
+                temperature=temperature,
+            )
+
+            # try to remove the left space and empty lines
+            filtered_elements = [f.lstrip(" ") for f in response[0].text.split("\n") if f != ""]
+
+        # we should probably match with original elements at this point
+        return filtered_elements
+
     async def transform_action(
         self,
         generated_action: str,
-        locators: List[Locator],
+        # locators: List[Locator],
         num_generations: int = 5,
         temperature: float = 0.25,
         **kwargs,
@@ -121,18 +164,17 @@ class Instructor:
         # give multiple tries to get a valid response
         for resp in response:
             try:
-                # should be similar to {"action": "type", "locator": 9, "action_args": "buy bodywash"}
+                # should be similar to {"action": "type", "element_id": 9, "action_args": "buy bodywash"}
                 resp_dict = json.loads(resp.text)
-                locator_id = resp_dict.pop("locator")
+                element_id = resp_dict.pop("element_id")
 
                 next_action = NextAction(
                     action=resp_dict.pop("action"),
-                    locator=locators[locator_id],
-                    locator_id=locator_id,
+                    # locator=locators[locator_id],
+                    element_id=element_id,
                     score=resp.likelihood,
                     action_args=resp_dict.pop("action_args", None),
                 )
-                breakpoint()
 
                 if len(resp_dict) > 0:
                     logger.warning("resp has more keys than we expected")

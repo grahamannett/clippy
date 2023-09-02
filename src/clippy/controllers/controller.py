@@ -22,17 +22,23 @@ def _full_response(data: Any, obj: Any):
 # i thought this might be useful for debugging/iteration but it seems like i could rather just call the full method
 
 
-def allow_full_response(func):
-    async def wrapper(*args, **kwargs):
-        resp = await func(*args, **kwargs)
-        if args[0]._return_full:
-            return _full_response(resp, resp)
-        return resp
+def allow_full_response(default_value_func):
+    def decorator(func):
+        async def wrapper(*args, **kwargs):
+            resp = await func(*args, **kwargs)
+            if args[0]._return_full:
+                return resp
+            return default_value_func(resp)
 
-    return wrapper
+        return wrapper
+
+    return decorator
 
 
 class Controller:
+    class Clients:
+        pass
+
     _is_async: bool = False
     _n_workers: int = 16
     _return_full: bool = False
@@ -100,38 +106,3 @@ class Controller:
             out += (scores,)
 
         return out
-
-
-# SYNC STUFF I DO NOT WANT ANYMORE
-# example of how youd do this with async
-def score_actions_sync(self, str_template: Template, options: List[Dict[str, str]], **kwargs):
-    """score a list of strings"""
-    opt_strs = str_template.map(options, **kwargs)
-    opt_strs = [{"text": opt, "return_full": True} for opt in opt_strs]
-
-    # to do this without threadpool use: [self.score_text(opt) for i, opt in enumerate(opt_strs)]
-    with ThreadPoolExecutor(max_workers=self._n_workers) as executor:
-        scores = executor.map(self.score_text, opt_strs)
-
-    # transform to scores as its a generator and if i need to check if text matches with options input
-    _scores = [(s[0].likelihood, s[0].text) for s in scores]
-    return [{**options[i], "score": score[0]} for i, score in enumerate(_scores)]
-
-
-def score_text(self, text: str, return_full: bool = False) -> float:
-    """
-    the most simple way to score a text is to generate it and return the likelihood
-    """
-    if isinstance(text, dict):
-        text, return_full = text["text"], text["return_full"]
-
-    score = self.generate(prompt=text, max_tokens=0, return_likelihoods="ALL")
-
-    if return_full:
-        return score
-
-    return score[0].likelihood
-
-
-def generate(self, prompt: str, *args, **kwargs):
-    raise NotImplementedError

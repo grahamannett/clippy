@@ -65,7 +65,7 @@ class Clippy:
         self.clear_step_states = clear_step_states
         self.data_manager = DataManager(data_dir=data_dir)  # data manager handles tasks/steps/dataclasses
 
-        self.DEBUG = strtobool(environ.get("DEBUG", False))
+        self.DEBUG = strtobool(environ.get("DEBUG", "False"))
 
     async def start(self, args: Namespace):
         cmd = args.cmd
@@ -135,7 +135,7 @@ class Clippy:
         await self.crawler.end()
         self.capture.end_capture()
 
-    async def run_capture(self, use_pause: bool = True, **kwargs):
+    async def run_capture(self, **kwargs):
         self.page = await self.start_capture()
 
         # if we are doing run capture we dont want to close browser so this is what you do
@@ -174,11 +174,22 @@ class Clippy:
         return task
 
     async def use_action(self, action: NextAction):
-        breakpoint()
-        self.task.curr_step.actions.append(action)
+        """
+        This asynchronous method takes a NextAction object as an argument and performs the action.
+
+        Args:
+            action (NextAction): The action to be performed.
+
+        Returns:
+            None
+        """
+        # self.task.curr_step.actions.append(action)
+        if hasattr(action, "locator"):
+            await action.locator.first.scroll_into_view_if_needed()
+
         await self.crawler.execute_action(action)
 
-    async def suggest_action(self, num_elems: int = 150, previous_commands: List[str] = None) -> NextAction:
+    async def suggest_action(self, num_elems: int = 100, previous_commands: List[str] = None) -> NextAction:
         instructor = Instructor(use_async=True)
         self.dom_parser = DOMSnapshotParser(self.crawler)  # need cdp_client and page so makes sense to use crawler
 
@@ -187,12 +198,26 @@ class Clippy:
         # get all the links/actions -- TODO: should these be on the instructor?
         await self.dom_parser.parse()
 
-        elements, locators = await self._get_locators_elements(num_elems=num_elems)
+        # elements, locators = await self._get_locators_elements(num_elems=num_elems)
 
-        generated_response = await instructor.generate_next_action(
+        # filter out text/images that are not actionable
+        elements = [el for el in self.dom_parser.elements_of_interest if self.dom_parser.element_allowed(el)]
+        elements = elements[:num_elems]
+        logger.info(f"filtering elements...")
+        filtered_elements = await instructor.filter_actions(
             elements,
             self.objective,
-            self.crawler.page.url,
+            self.crawler.url,
+            previous_commands=previous_commands,
+            max_elements=10,
+            temperature=0.0,
+        )
+
+        logger.info(f"generating response with {len(filtered_elements)} elements...")
+        generated_response = await instructor.generate_next_action(
+            filtered_elements,
+            self.objective,
+            self.crawler.url,
             previous_commands=previous_commands,
             num_generations=1,
             temperature=0.0,
@@ -201,12 +226,16 @@ class Clippy:
         generated_response = generated_response[0]
 
         # transform the generated action to a json type action to a NextAction type
-        next_action = await instructor.transform_action(generated_response.text, locators, temperature=0.2)
-
-        if not next_action:
-            raise NotImplementedError("need to implement _find_action_from_elems")
+        logger.info(f"transformering {generated_response.text} to usable")
+        next_action = await instructor.transform_action(generated_response.text, temperature=0.2)
+        next_action.locator = self._get_locator_for_action(next_action)
 
         return next_action
+
+    def _get_locator_for_action(self, action: NextAction):
+        element_buffer = self.dom_parser.page_element_buffer[action.element_id]
+        loc = self.dom_parser.get_loc_helper(element_buffer)
+        return loc
 
     def _get_previous_commands(self, previous_commands: List[str] = []):
         if len(self.task.steps) >= 1:

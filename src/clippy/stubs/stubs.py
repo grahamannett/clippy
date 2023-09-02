@@ -14,16 +14,12 @@ def __call__(self, *args: Any, **kwds: Any) -> Any:
     return self.render(*args, **kwds)
 
 
-# monkey patch
+# patch this class to be more useful
 Template.map = map
 Template.__call__ = __call__
 
 
-# environment = Environment(loader=FileSystemLoader(environ.get("TEMPLATES_DIR", "clippy/stubs/templates/")))
-
-
 class StubHelper:
-    available_templates = {}
     environment = Environment(loader=FileSystemLoader(environ.get("TEMPLATES_DIR", constants.TEMPLATES_DIR)))
 
     def map(self, template: Template, options: List[Dict[str, str]], **kwargs) -> List[str]:
@@ -40,15 +36,12 @@ class StubHelper:
 
 class StubTemplates:
     Template = Template
-    prompt = StubHelper.get_template("prompt.jinja")
     examples_prompt = StubHelper.get_template("examples_prompt.jinja")
-    message = StubHelper.get_template("message.jinja")
     state = StubHelper.get_template("state.jinja")
     transform_generation = StubHelper.get_template("transform_generation.jinja")
 
-
-if __name__ == "__main__":
-    prompt = StubTemplates.prompt
-    print(prompt.render())
-    print("prompt done!! !! !!!")
-    print(prompt())
+    # prompt is main template
+    prompt = StubHelper.get_template("prompt.jinja")
+    # headers for prompt
+    header_next_action = StubHelper.get_template("header_next_action.jinja")
+    header_filter_elements = StubHelper.get_template("header_filter_elements.jinja")
