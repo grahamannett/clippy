@@ -107,7 +107,6 @@ class Step(ModelBase):
         merged_actions = [self.actions.pop(0)]
 
         for idx, action in enumerate(self.actions):
-            breakpoint()
             if isinstance(action, merged_actions[-1]) and (merged_actions[-1].should_merge(action)):
                 merged_actions[-1].update(action)
             else:
@@ -165,7 +164,7 @@ class Task(ModelBase):
     curr_step: Step = None
     timestamp: datetime | str = str(datetime.now())
 
-    def __call__(self, action: Action, **kwargs):
+    def __call__(self, action: Action = None, step: Step = None, **kwargs) -> None:
         """
         Method to add an action to the current step of the task.
 
@@ -174,10 +173,11 @@ class Task(ModelBase):
         action : Action
             The action to be added.
         """
+
         if not isinstance(action, Action):
             raise ValueError(f"action must be of type Action, not {type(action)}")
 
-        self.curr_step(action, **kwargs)
+        return self.curr_step(action, **kwargs)
 
     def __repr__(self) -> str:
         """
@@ -190,31 +190,6 @@ class Task(ModelBase):
         """
         steps_info = "\n".join([f"{s}" for s in self.steps])
         return f"Task: {self.objective} | {len(self.steps)} steps \n{steps_info}"
-
-    @property
-    def current(self) -> Step:
-        """
-        Property to get the current step of the task.
-
-        Returns
-        -------
-        Step
-            The current step of the task.
-        """
-        return self.curr_step
-
-    @current.setter
-    def current(self, step: Step):
-        """
-        Setter for the current step of the task.
-
-        Parameters
-        ----------
-        step : Step
-            The step to be set as the current step.
-        """
-        self.curr_step = step
-        self.steps.append(step)
 
     @classmethod
     def from_dict(cls, data: dict) -> "Task":
@@ -246,6 +221,41 @@ class Task(ModelBase):
 
             task.steps.append(step)
         return task
+
+    @classmethod
+    def from_page(cls, objective: str, page: Page = None, url: str = None):
+        if not page and not url:
+            raise ValueError("must provide either page or url")
+
+        task = cls(objective=objective)
+        step = Step(url=url or page.url)
+        task.current = step
+        return task
+
+    @property
+    def current(self) -> Step:
+        """
+        Property to get the current step of the task.
+
+        Returns
+        -------
+        Step
+            The current step of the task.
+        """
+        return self.curr_step
+
+    @current.setter
+    def current(self, step: Step):
+        """
+        Setter for the current step of the task.
+
+        Parameters
+        ----------
+        step : Step
+            The step to be set as the current step.
+        """
+        self.steps.append(step)
+        self.curr_step = step
 
     @property
     def n_steps(self) -> int:
@@ -282,7 +292,7 @@ class Task(ModelBase):
         """
         return self.__repr__()
 
-    async def page_change_async(self, page: Page | Frame | str):
+    async def page_change_async(self, page: Page | Frame | str) -> Step:
         """
         Asynchronous method to handle page change.
 
@@ -291,9 +301,9 @@ class Task(ModelBase):
         page : Page | Frame | str
             The new page.
         """
-        self.page_change(page=page)
+        return self.page_change(page=page)
 
-    def page_change(self, page: Page | Frame = None, url: str = None) -> None:
+    def page_change(self, page: Page | Frame = None, url: str = None) -> Step:
         """
         Method to handle page change.
 
@@ -307,13 +317,28 @@ class Task(ModelBase):
         if page:
             url = page.url
 
-        if self._check_new_page(url) is False:
+        if not self._is_new_page(url):
             return
 
-        self.curr_step = Step(url=url)
-        self.steps.append(self.curr_step)
+        self.current = Step(url=url)
+        return self.current
 
-    def _check_new_page(self, url: str) -> bool:
+        # self.steps.append(self.curr_step)
+        # return self.curr_step
+
+    def _add_step(self, step: Step):
+        """
+        Method to add a step to the task.
+
+        Parameters
+        ----------
+        step : Step
+            The step to be added.
+        """
+        self.current = step
+        return self.current
+
+    def _is_new_page(self, url: str) -> bool:
         """
         Method to check if a new page has been loaded.
 

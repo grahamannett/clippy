@@ -8,16 +8,25 @@ from clippy.states import Task
 class DataManager:
     """this is for managing all the trajectories as eventually they need to be sql type to work with pynecone"""
 
+    _task: Task
+    tasks: list[Task] = []
+
     def __init__(self, data_dir: str = "data/tasks"):
         self.data_dir = data_dir
-        self.tasks = []
-
         # self.curr_task_output = f"{self.data_dir}/current"
         self._clear_on_start = True
 
     @property
+    def task(self):
+        return self.tasks[-1]
+
+    @property
     def curr_task_output(self):
         return f"{self.data_dir}/current"
+
+    def capture_task(self, task: Task):
+        self.tasks.append(task)
+        self._task = task
 
     def capture_start(self):
         if self._clear_on_start:
@@ -86,13 +95,14 @@ class DataManager:
         with open(task_file, "w") as f:
             json.dump(json_data, f, indent=4)
 
-    def save(self, task: Task):
+    def save(self, task: Task = None):
+        task = task or self.task
+
         # dump task to current/task.json
         self.dump_task(task)
         folder = self.get_folder(task)
 
         shutil.copytree(self.curr_task_output, folder)
-        print("saved data manager... ")
 
     def get_folder(self, task: Task):
         """need some generic way to get the folder so make it a func for now

@@ -200,8 +200,8 @@ class Click(Action):
             The scale factor for the screenshot, by default 1.0
         """
         # elements = page.locator(self.selector).all()
-        elements = page.locator(self.selector).first()
-        # if len(elements := await page.locator(self.selector).all()) > 1:
+        elements = await page.locator(self.selector).all()
+
         if elements is None:
             print("WARNING: NO ELEMENT FOUND FOR SCREENSHOT")
             return
@@ -212,9 +212,8 @@ class Click(Action):
         if element is None:
             print("WARNING: element not found for screenshot")
             return None
-        bbox = await element.bounding_box()
 
-        bbox = BoundingBox(**bbox)
+        bbox = BoundingBox(**(await element.bounding_box()))
         screenshot = await page.screenshot(path=path, clip=bbox.scale(scale).to_dict())
         return screenshot
 
@@ -329,6 +328,9 @@ class Actions(Action):
 
     # to allow Actions.Action for type hinting/isinstance
     Action: Type[Action] = Action  # Type hint for Action
+
+    def __new__(cls, class_name: str, *args, **kwargs) -> Action:
+        breakpoint()
 
     def __class_getitem__(cls, class_name: str) -> Type[Action]:
         """

@@ -19,22 +19,6 @@ def _full_response(data: Any, obj: Any):
     return raw
 
 
-# i thought this might be useful for debugging/iteration but it seems like i could rather just call the full method
-
-
-def allow_full_response(default_value_func):
-    def decorator(func):
-        async def wrapper(*args, **kwargs):
-            resp = await func(*args, **kwargs)
-            if args[0]._return_full:
-                return resp
-            return default_value_func(resp)
-
-        return wrapper
-
-    return decorator
-
-
 class Controller:
     class Clients:
         pass
@@ -72,13 +56,7 @@ class Controller:
             *[self.generate(prompt=opt, max_tokens=0, return_likelihoods="ALL") for opt in options]
         )
         return scores
-        # not sure if i should clean the response or not
-        # return [{"score": s[0].likelihood, "response": s} for i, s in enumerate(scores)]
 
-    def next_action(self, elements: List[str]):
-        state = StubTemplates.state
-
-    # @allow_full_response
     async def score_text(self, text: str) -> float:
         resp = await self.generate(prompt=text, max_tokens=0, return_likelihoods="ALL")
         return resp[0].likelihood

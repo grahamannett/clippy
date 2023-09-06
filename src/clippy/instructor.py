@@ -20,11 +20,15 @@ action_options = [{"next_command": "click"}, {"next_command": "type"}]
 class NextAction:
     action: str
     element_id: int = None
-    locator: Locator = None
+    element_metadata: str = None
     action_args: str = None
 
+    locator: Locator = None
     # needed if we score all actions
     score: float = None
+
+    def to_action(self):
+        return
 
 
 class Instructor:
@@ -73,6 +77,7 @@ class Instructor:
         self,
         elements: List[str],
         objective: str,
+        title: str,
         url: str,
         previous_commands: List[str] = None,
         max_tokens: int = 150,
@@ -83,10 +88,12 @@ class Instructor:
         """given the page state, generate the next action, this is more ideal than scoring all actions"""
         prompt = StubTemplates.prompt.render(
             objective=objective,
+            title=title,
             url=url,
             browser_content=elements,
             previous_commands=previous_commands,
         )
+
         response = await self.lm_controller.generate(
             prompt=prompt,
             max_tokens=max_tokens,
@@ -94,12 +101,14 @@ class Instructor:
             return_likelihoods=return_likelihoods,
             temperature=temperature,
         )
+        breakpoint()
         return response
 
     async def filter_actions(
         self,
         elements: List[str],
         objective: str,
+        title: str,
         url: str,
         max_elements: int = 20,
         max_tries: int = 1,
@@ -117,6 +126,7 @@ class Instructor:
             prompt = StubTemplates.prompt.render(
                 header_prompt=StubTemplates.header_filter_elements.render(max_elements=max_elements),
                 objective=objective,
+                title=title,
                 url=url,
                 browser_content=filtered_elements,
                 previous_commands=previous_commands,
@@ -124,6 +134,7 @@ class Instructor:
                 element_prefix="- ",
                 footer_prompt="Filtered Browser Content:\n",
             )
+            logger.info("making filter request...")
 
             response = await self.lm_controller.generate(
                 prompt=prompt,
@@ -132,6 +143,8 @@ class Instructor:
                 return_likelihoods=return_likelihoods,
                 temperature=temperature,
             )
+
+            logger.info("done filter request...")
 
             # try to remove the left space and empty lines
             filtered_elements = [f.lstrip(" ") for f in response[0].text.split("\n") if f != ""]
@@ -142,7 +155,6 @@ class Instructor:
     async def transform_action(
         self,
         generated_action: str,
-        # locators: List[Locator],
         num_generations: int = 5,
         temperature: float = 0.25,
         **kwargs,
@@ -164,21 +176,26 @@ class Instructor:
         # give multiple tries to get a valid response
         for resp in response:
             try:
-                # should be similar to {"action": "type", "element_id": 9, "action_args": "buy bodywash"}
+                # should be similar to:
+                # {"action": "type", "element_id": 9, "element_metadata": null, "action_args": "buy bodywash"}
                 resp_dict = json.loads(resp.text)
-                element_id = resp_dict.pop("element_id")
 
                 next_action = NextAction(
                     action=resp_dict.pop("action"),
-                    # locator=locators[locator_id],
-                    element_id=element_id,
-                    score=resp.likelihood,
+                    element_id=resp_dict.pop("element_id"),
+                    element_metadata=resp_dict.pop("element_metadata", None),
                     action_args=resp_dict.pop("action_args", None),
+                    # score is the least needed
+                    score=resp.likelihood,
                 )
 
                 if len(resp_dict) > 0:
                     logger.warning("resp has more keys than we expected")
-                    breakpoint()
+                    # not a field
+                    next_action.extra = resp_dict
+
+                # attach the response to the action
+                next_action.response = resp
                 return next_action
             except json.decoder.JSONDecodeError or KeyError:
                 logger.error(f"resp isn't json decodable: {resp[0].text}")
@@ -213,10 +230,4 @@ class Instructor:
 
         scored = sorted(scored, key=lambda x: x.score, reverse=True)
 
-        # matched_idx = await instructor.match_generated_output(generated_action[0].text, elems)
-
-        # if matched_idx:
-        #     _elem = elems[matched_idx]
-        #     _locator = locators[matched_idx]
-
-        breakpoint()
+        return scored

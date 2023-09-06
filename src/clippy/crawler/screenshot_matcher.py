@@ -1,12 +1,15 @@
 import os
 
 import cv2
+from playwright.async_api import Page
 
 from clippy.states import Action
-from playwright.async_api import Page
 
 
 class ScreenshotMatcher:
+    def __init__(self) -> None:
+        self.data_dir = "data/tmp/screenshots"
+
     def get_latest_screenshot_path(self, data_dir, task_id, step_id):
         screenshot_path = f"{data_dir}/{task_id}/{step_id}.png"
         return screenshot_path
@@ -19,7 +22,7 @@ class ScreenshotMatcher:
             breakpoint()
 
         screenshot = cv2.imread(screenshot_path)
-        action_template_outfile = "xtmp/action_template.png"
+        action_template_outfile = f"{self.data_dir}/action_template.png"
         extra_buffer = 20
         x, y, w, h = action_bounding_box.x, action_bounding_box.y, action_bounding_box.width, action_bounding_box.height
         scroll_x, scroll_y = action_bounding_box.scrollX, action_bounding_box.scrollY
@@ -34,7 +37,7 @@ class ScreenshotMatcher:
         return action_template_outfile
 
     def get_point_from_template(self, page: Page):
-        curr_step_screenshot = "xtmp/curr_step_screenshot.png"
+        curr_step_screenshot = f"{self.data_dir}/curr_step_screenshot.png"
         # TODO: if this works, try to get the image from buffer instea
 
         viewport_size = page.viewport_size
@@ -67,5 +70,5 @@ class ScreenshotMatcher:
 
         cv2.rectangle(screenshot, (startX, startY), (endX, endY), (255, 0, 0), 3)
         cv2.circle(screenshot, middle_point, 10, (0, 0, 255), -1)
-        cv2.imwrite("xtmp/curr_step_point.png", screenshot)
+        cv2.imwrite(f"{self.data_dir}/curr_step_point.png", screenshot)
         return middle_point

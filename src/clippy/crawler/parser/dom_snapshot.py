@@ -8,6 +8,10 @@ from playwright.async_api import CDPSession, Page, Locator
 from clippy.crawler.crawler import Crawler
 from clippy.states.actions import Position
 
+
+TYPEABLE = ["input", "select"]
+CLICKABLE = ["link", "button"]
+
 black_listed_elements = set(
     [
         "html",
@@ -39,10 +43,6 @@ black_listed_elements = set(
 #                    'node_index', 'backend_node_id', 'node_name', 'node_value', 'node_meta',
 #                     'is_clickable', 'origin_x', 'origin_y', 'center_x', 'center_y'
 #              ]
-
-
-TYPEABLE = ["input", "select"]
-CLICKABLE = ["link", "button"]
 
 
 @dataclass

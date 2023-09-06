@@ -1,15 +1,19 @@
 import asyncio
-import os
 import sys
-from pathlib import Path
-from typing import Awaitable, Callable, Coroutine, List
+from typing import Awaitable
 
 from loguru import logger
 
 # async types and functions
 from playwright.async_api import Browser, BrowserContext, CDPSession, Page, PlaywrightContextManager
 
-from clippy import constants
+from clippy.constants import (
+    action_delay,
+    default_preload_injection_script,
+    default_user_agent,
+    default_viewport_size,
+    input_delay,
+)
 from clippy.crawler.selectors import Selector
 
 
@@ -17,17 +21,17 @@ class Crawler:
     """ideally i want to use crawler in async context manager but to make
     it possible to be used from so many places i need to think about how to do it"""
 
-    async_tasks = {"pause": None}
+    async_tasks = {"crawler_pause": None}
     browser: Browser
-    ctx: BrowserContext
     page: Page
+    ctx: BrowserContext
     cdp_client: CDPSession
 
     # js scripts or evals
     end_early_js: str = "() => {playwright.resume()}"
-    preload_injection_script: str = constants.default_preload_injection_script
+    preload_injection_script: str = default_preload_injection_script
 
-    input_delay: int = 100
+    input_delay: int = input_delay
 
     def __init__(
         self,
@@ -40,6 +44,10 @@ class Crawler:
         self.headless = headless
         self.clippy = clippy
 
+        if self.clippy:
+            self.async_tasks = self.clippy.async_tasks
+            self.async_tasks["crawler_pause"] = None
+
     async def __aenter__(self):
         await self.start(use_instance_properties=True)
         return self
@@ -48,35 +56,43 @@ class Crawler:
         await self._end_async()
 
     @property
+    def title(self):
+        return self.page.title()
+
+    @property
     def url(self):
         return self.page.url
 
     @property
     def pause_task(self) -> asyncio.Task:
-        if (task := self.async_tasks["pause"]) is None:
+        if (task := self.async_tasks["crawler_pause"]) is None:
             task = self.pause()
         return task
 
     def pause(self, page: Page = None) -> asyncio.Task:
-        if task := self.async_tasks["pause"]:
+        if task := self.async_tasks["crawler_pause"]:
             return task
 
         page = page or self.page
-        return self.add_background_task(page.pause(), name="pause")
+        return self.add_background_task(page.pause(), name="crawler_pause")
 
     async def _end_async(self):
-        if self.cdp_client:
+        # close cdp client before page
+        if hasattr(self, "cdp_client"):
             await self.cdp_client.detach()
 
-        await self.page.close()
-        await self.browser.close()
-        await self.ctx_manager.__aexit__()
+        if hasattr(self, "page"):
+            await self.page.close()
+        if hasattr(self, "browser"):
+            await self.browser.close()
+        if hasattr(self, "ctx_manager"):
+            await self.ctx_manager.__aexit__()
 
     def _end_sync(self):
-        if self.cdp_client:
-            self.cdp_client.detach()
         self.page.close()
         self.browser.close()
+        if self.cdp_client:
+            self.cdp_client.detach()
         self.ctx_manager.__exit__()
 
     def end(self) -> Awaitable[None] | None:
@@ -95,7 +111,7 @@ class Crawler:
         # Selectors must be registered before creating the page.
         self.selectors = await asyncio.gather(*self.extend_selectors())
         self.browser = await self.pw.chromium.launch(headless=self.headless)
-        self.ctx = await self.browser.new_context()
+        self.ctx = await self.browser.new_context(user_agent=default_user_agent)
 
         await self.ctx.route("**/*", lambda route: route.continue_())
 
@@ -103,6 +119,7 @@ class Crawler:
             await self.injection(ctx=self.ctx, script=self.preload_injection_script)
 
         self.page = await self.ctx.new_page()
+        await self.page.set_viewport_size(default_viewport_size)
 
         self.cdp_client = await self.get_cdp_client()
         return self.page
@@ -122,7 +139,7 @@ class Crawler:
         if getattr(self.clippy, "DEBUG", False):
             return
 
-        print(end_early_str)
+        logger.info(end_early_str.upper())
 
         while line := await asyncio.to_thread(sys.stdin.readline):
             return await self.page.evaluate(self.end_early_js)
@@ -160,20 +177,24 @@ class Crawler:
             "type": self.execute_type,
             "click": self.execute_click,
         }
-
         await _actions[action.action](action)
 
     async def execute_click(self, action: "NextAction", **kwargs):
         loc = action.locator.nth(0)
         await loc.click(delay=self.input_delay)
-        await self.page.wait_for_load_state(timeout=500)
+        await self.page.wait_for_load_state()
 
     async def execute_type(self, action: "NextAction", **kwargs):
+        logger.info("doing click...")
         await self.execute_click(action)
+        # await asyncio.sleep(self.input_delay)
+        logger.info(f"doing type...{action.action_args}")
         await self.page.keyboard.type(action.action_args, delay=self.input_delay)
 
-        # TODO: i should ask for next action after typing, NOT just press enter
-        await self.page.keyboard.press("Enter")
+        logger.info("doing enter...")
+        # TODO: i should ask for next action after typing from LM, NOT just press enter
+        await self.page.keyboard.press("Enter", delay=self.input_delay)
+        # await asyncio.sleep(action_delay)
 
     @staticmethod
     def sync_playwright():

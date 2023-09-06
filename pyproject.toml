@@ -38,3 +38,5 @@ test = ["pytest>=7.4.0"]
 [tool.pytest.ini_options]
 # ignore warnings not from clippy
 filterwarnings = ["ignore", "default:::clippy"]
+pythonpaths = ["src", "tests"]
+# testpaths = ["tests/"]

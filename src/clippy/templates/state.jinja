@@ -1,6 +1,7 @@
 Present state:
-    Objective: {{ objective }}
-    Current URL: {{ url }}
+  Objective: {{ objective }}
+  Page Title: {{ title }}
+  Page URL: {{ url }}
 ---
 Current Browser Content: {% if browser_content %}{% for line in browser_content %}
 {{ element_prefix }}{{ line }}{% endfor %}{% else %}None{% endif %}

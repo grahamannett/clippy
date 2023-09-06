@@ -1,11 +1,14 @@
 import unittest
-from os import environ
+import json
+import torch
 
 from clippy.stubs import StubTemplates
 from clippy.controllers import Controller
+from clippy.controllers.apis.cohere_controller_utils import CohereJSONEncoder
 from clippy.controllers.controller_config import ResponseConfig
 
-from clippy.crawler.parser.dom_snapshot import filter_page_elements
+from cohere.responses.generation import Generation, Generations, TokenLikelihood
+
 
 elements = [
     "button 1 hnname",
@@ -33,20 +36,21 @@ elements = [
 
 class TestController(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        self.co = Controller.Clients.Cohere()
+        self.controller = Controller.Clients.Cohere()
 
     async def asyncTearDown(self):
-        await self.co.close()
+        await self.controller.close()
 
     async def test_tokenize(self):
-        co = self.co
+        co = self.controller
         test_string = "tokenized string"
         base_tokens = await co.tokenize(test_string)
 
         ResponseConfig.return_raw = True
 
         tokens = await co.tokenize(test_string)
-        breakpoint()
+
+        assert tokens.tokens == base_tokens
 
         tokens = (await co.tokenize(test_string)).tokens
         assert len(tokens) > 2
@@ -55,13 +59,58 @@ class TestController(unittest.IsolatedAsyncioTestCase):
         assert string == test_string
 
         bad_string = (await co.detokenize(tokens=tokens + [9000])).text
-
         assert string != bad_string
-        breakpoint()
+
+    async def test_embeds(self):
+        controller = self.controller
+        test_string = "tokenized string"
+        embeddings = await controller.embed(test_string)
+        assert len(embeddings.embeddings[0]) == 4096
 
     async def test_controller_score(self):
-        co = self.co
+        co = self.controller
 
         scored_text = await co.score_text("This would be a good sentence to score.")
         bad_scored_text = await co.score_text("Rogue asdf !HEllo Friend!! Yessir.")
         assert scored_text > bad_scored_text
+
+
+class TestCohere(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.response_generate_pt = "test_output/cohere_responses/test_generate.pt"
+        self.response_embed_pt = "test_output/cohere_responses/test_embed.pt"
+
+    async def test_generate(self):
+        co = Controller.Clients.Cohere()
+        response = await co.generate(prompt="test generate")
+        torch.save(response, self.response_generate_pt)
+        await co.close()
+
+    async def test_embed(self):
+        co = Controller.Clients.Cohere()
+        response = await co.embed(texts="test generate")
+        torch.save(response, self.response_embed_pt)
+        await co.close()
+
+    async def test_encode(self):
+        response = torch.load(self.response_generate_pt)
+
+        # generation_encoded = json.dumps(response.generations[0].__dict__, cls=CohereJSONEncoder)
+        # generation_dict = json.loads(generation_encoded)
+        # generation = Generation(**generation_dict)
+
+        generations = [json.dumps(g.__dict__, cls=CohereJSONEncoder) for g in response.generations]
+        generations = [Generation(**json.loads(g)) for g in generations]
+
+        generation = Generations(generations=generations, return_likelihoods=response.return_likelihoods)
+
+        data = json.dumps(response, cls=CohereJSONEncoder)
+
+        dict_data = json.loads(data)
+        generations = [Generation.from_response(d) for d in dict_data["data"]]
+        cohere_struct = Generations(
+            generations=generations, return_likelihoods=dict_data["return_likelihoods"], meta=dict_data["meta"]
+        )
+
+        response = torch.load(self.response_embed_pt)
+        data = json.dumps(response, cls=CohereJSONEncoder)

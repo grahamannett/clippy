@@ -2,7 +2,7 @@ import asyncio
 from argparse import Namespace
 from distutils.util import strtobool
 from os import environ
-from typing import List
+from typing import Awaitable, Dict, List
 
 from loguru import logger
 from playwright.async_api import Page
@@ -14,6 +14,7 @@ from clippy.crawler.parser.dom_snapshot import DOMSnapshotParser, Locators
 from clippy.dm.data_manager import DataManager
 from clippy.states import Task
 from clippy.instructor import Instructor, NextAction
+from clippy.utils._input import _get_input
 
 
 def _device_ratio_check():
@@ -30,17 +31,15 @@ def _check_exec_type(exec_type: str, task: str):
     return exec_type
 
 
-def _get_input(string: str = None) -> str:
-    return input(string)
-
-
 class Clippy:
     # crawler - capture - data_manager
     crawler: Crawler
     capture: CaptureAsync
     data_manager: DataManager
+    task: Task
 
-    async_tasks = {}
+    # async_tasks means background processes, not a clippy `Task`
+    async_tasks: Dict[str, asyncio.Task | asyncio.Event | asyncio.Condition] = {}
 
     def __init__(
         self,
@@ -53,7 +52,6 @@ class Clippy:
         data_dir: str = "data/tasks",
     ):
         # gui related settings
-
         self.headless = headless
         self.key_exit = key_exit
         self.pause_start = pause_start
@@ -67,6 +65,21 @@ class Clippy:
 
         self.DEBUG = strtobool(environ.get("DEBUG", "False"))
 
+    @property
+    def page(self):
+        return getattr(self.crawler, "page", None)
+
+    @property
+    def url(self):
+        return getattr(self.crawler, "url", None)
+
+    @property
+    def task(self):
+        if self.data_manager:
+            return self.data_manager.task
+
+        return None
+
     async def start(self, args: Namespace):
         cmd = args.cmd
         no_confirm = args.no_confirm
@@ -74,18 +87,17 @@ class Clippy:
 
         exec_type = _check_exec_type(args.exec_type, cmd)
 
-        funcs = {
+        _go = {
             "sync": {},
             "async": {
-                # "assist": self.run_assist,
                 "capture": self.run_capture,
                 "replay": self.run_replay(class_handler=MachineCaptureAsync),
             },
         }
 
-        func = funcs[exec_type].get(cmd, None)
+        func = _go[exec_type].get(cmd, None)
         if func is None:
-            raise Exception(f"\n\n\t==>cmd `{cmd}` not supported in {exec_type} mode\n\n")
+            raise Exception(f"`{cmd}` not supported in {exec_type} mode")
 
         return await func(use_llm=use_llm, no_confirm=no_confirm)
 
@@ -99,33 +111,37 @@ class Clippy:
             print("no objective set, please enter objective")
             self.objective = self._get_input(self.objective)
 
-    async def wait_until(self, message: str, timeout: float = 0.5, amt: float = 0.1):
-        # idk how to ensure that we have started taking screenshot when screenshot is fired on domcontentloaded which might not happen before we get here
+    async def wait_until(self, message: str = None, timeout: float = 0.5, **kwargs) -> None:
         # Ive tried a lot of things besides just sleeping but the order of stuff happening is not consistent
         # there is probably a better way to do this using async but would require knowing exactly what is happening
-        await asyncio.sleep(amt)
+        if event := self.async_tasks.get(message, None):
+            if event.is_set():
+                event.clear()
 
-        if event := self.capture.events.get(message, None):
             logger.debug(f"waiting on {message} with {event}")
-            while event.locked():
-                await asyncio.sleep(amt)
-
-                if (timeout := timeout - amt) <= 0:
-                    logger.debug(f"timeout on {message}")
-                    event.notify_all()
-                    return
+            try:
+                await asyncio.wait_for(event.wait(), timeout=timeout)
+            except asyncio.TimeoutError:
+                logger.warning(f"timeout on {message}")
 
     async def start_capture(self, goto_start_page: bool = True):
-        self.capture = CaptureAsync(objective=self.objective, data_manager=self.data_manager, clippy=self)
+        self.data_manager.capture_task(Task(self.objective))
+        self.capture = CaptureAsync(data_manager=self.data_manager, clippy=self)
         self.crawler = Crawler(headless=self.headless, clippy=self)
-        self.task = self.capture.task
+
         page = await self.capture.start(self.crawler, start_page=False)
 
         if self.pause_start:
-            self.async_tasks["pause_start"] = self.crawler.pause_task
+            self.async_tasks["crawler_pause"] = self.crawler.pause_task
 
         if self.key_exit:
-            self.async_tasks["key_exit"] = self.crawler.add_background_task(self.crawler.allow_end_early())
+            task = self.crawler.add_background_task(self.crawler.allow_end_early(), "key_exit")
+
+            # # TODO make clearer
+            # if ("key_exit" in self.async_tasks) and (self.async_tasks["key_exit"] != task):
+            #     breakpoint()
+
+            self.async_tasks["key_exit"] = task
 
         if goto_start_page:
             await page.goto(self.start_page)
@@ -133,12 +149,15 @@ class Clippy:
 
     async def end_capture(self):
         await self.crawler.end()
-        self.capture.end_capture()
+        self.data_manager.save(task=self.task)
+
+    async def run_assist(self, **kwargs):
+        raise NotImplementedError
 
     async def run_capture(self, **kwargs):
         self.page = await self.start_capture()
 
-        # if we are doing run capture we dont want to close browser so this is what you do
+        # if we capture we dont want to close browser so we will await on pause_start
         await self.async_tasks["pause_start"]
         await self.end_capture()
 
@@ -155,23 +174,19 @@ class Clippy:
     def get_task_for_replay(self, tasks: List[Task]) -> Task:
         self.data_manager.load()
         tasks: List[Task] = self.data_manager.tasks
-        for t_i, task in enumerate(tasks):
-            n_steps = task.n_steps
-            n_actions = task.n_actions
-            tstamp = task.timestamp
-            print(
-                f"Task-{t_i} is {task.objective} with {n_steps} steps and {n_actions} num_actions @ {tstamp if tstamp else 'unknown'}"
+        for i, task in enumerate(tasks):
+            logger.info(
+                f"Task-{i} is {task.objective} with {task.n_steps} steps and {task.n_actions} num_actions @ {task.timestamp or 'unknown'}"
             )
 
         task_select = _get_input("Select task: ")
         try:
             task_select = int(task_select)
         except ValueError:
-            # this is just so i can break into the debugger if i dont enter a number at this step
+            # so i can break into the debugger if i dont enter a number at this step
             breakpoint()
 
-        task = tasks[task_select]
-        return task
+        return tasks[task_select]
 
     async def use_action(self, action: NextAction):
         """
@@ -183,11 +198,26 @@ class Clippy:
         Returns:
             None
         """
-        # self.task.curr_step.actions.append(action)
+        logger.info("in use_action")
+        self.async_tasks["screenshot_event"].clear()
+
+        logger.info("check loc")
         if hasattr(action, "locator"):
             await action.locator.first.scroll_into_view_if_needed()
 
+        logger.info("execute action")
         await self.crawler.execute_action(action)
+
+    async def get_elements(self, filter_elements: bool = True):
+        self.dom_parser = DOMSnapshotParser(self.crawler)
+        await self.dom_parser.parse()
+
+        elements = self.dom_parser.elements_of_interest
+
+        if filter_elements:
+            elements = list(filter(self.dom_parser.element_allowed, elements))
+
+        return elements
 
     async def suggest_action(self, num_elems: int = 100, previous_commands: List[str] = None) -> NextAction:
         instructor = Instructor(use_async=True)
@@ -196,17 +226,16 @@ class Clippy:
         previous_commands = self._get_previous_commands(previous_commands)
 
         # get all the links/actions -- TODO: should these be on the instructor?
-        await self.dom_parser.parse()
-
-        # elements, locators = await self._get_locators_elements(num_elems=num_elems)
-
         # filter out text/images that are not actionable
-        elements = [el for el in self.dom_parser.elements_of_interest if self.dom_parser.element_allowed(el)]
+        elements = await self.get_elements(filter_elements=True)
         elements = elements[:num_elems]
-        logger.info(f"filtering elements...")
+
+        title = await self.crawler.title
+        logger.info(f"for `{title[:20]}` filtering {len(elements)} elements...")
         filtered_elements = await instructor.filter_actions(
             elements,
             self.objective,
+            title,
             self.crawler.url,
             previous_commands=previous_commands,
             max_elements=10,
@@ -217,6 +246,7 @@ class Clippy:
         generated_response = await instructor.generate_next_action(
             filtered_elements,
             self.objective,
+            title,
             self.crawler.url,
             previous_commands=previous_commands,
             num_generations=1,
@@ -226,10 +256,10 @@ class Clippy:
         generated_response = generated_response[0]
 
         # transform the generated action to a json type action to a NextAction type
-        logger.info(f"transformering {generated_response.text} to usable")
-        next_action = await instructor.transform_action(generated_response.text, temperature=0.2)
+        logger.info(f"transforming response...{generated_response.text}")
+        next_action = await instructor.transform_action(generated_response.text, temperature=0.3)
         next_action.locator = self._get_locator_for_action(next_action)
-
+        logger.info(f"transformed {generated_response.text} to {next_action}")
         return next_action
 
     def _get_locator_for_action(self, action: NextAction):

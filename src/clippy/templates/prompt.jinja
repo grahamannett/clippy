@@ -1,5 +1,7 @@
 {% if header_prompt %}{{ header_prompt }}{% else %}{% include 'header_next_action.jinja' %}{% endif %}
-{% if not skip_available_actions %}{% include 'available_actions.jinja' %}{% include 'examples_prompt.jinja' %}{% endif %}
+{% if not skip_available_actions %}
+{% include 'available_actions.jinja' %}{% include 'examples_prompt.jinja' %}{% endif %}
+---
 {% if state %}{{ state }}{% else %}{% include 'state.jinja' %}{% endif %}
 ---
 {% if footer_prompt %}{{ footer_prompt }}{% else %}Next Command:{{ next_command }}{% endif %}

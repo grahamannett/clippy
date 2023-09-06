@@ -33,10 +33,16 @@ async def catch_console_injections(msg: ConsoleMessage, print_injection: bool = 
     return action
 
 
+def log_hook(name: str):
+    async def hook(*args, **kwargs):
+        logger.info(f"!!{name.upper()} {args} {kwargs}")
+
+    return hook
+
+
 class CaptureAsync(Capture):
     def __init__(
         self,
-        objective: str = None,
         start_page: str = None,
         data_manager: DataManager = None,
         use_llm: bool = False,
@@ -44,7 +50,6 @@ class CaptureAsync(Capture):
         **kwargs,
     ) -> None:
         super().__init__(
-            objective=objective,
             start_page=start_page,
             data_manager=data_manager,
             use_llm=use_llm,
@@ -56,25 +61,28 @@ class CaptureAsync(Capture):
         self.captured_screenshot_urls = []
 
     async def hook_dom_group(self, page: Page):
-        logger.info(f">=>PAGE-CHANGE|{page.url}")
+        logger.info(f"PAGE-CHANGE|{page.url}")
         await self.hook_update_task_new_page(page=page)
-
-        async with self.events["screenshot_event"]:
-            await self.hook_capture_screenshot(page=page)
+        await self.hook_capture_screenshot(page=page)
+        logger.info(f"PAGE-CHANGE-DONE|{page.url}")
 
     async def hook_update_task_new_page(self, page: Page):
         await self.task.page_change_async(page=page)
 
     async def hook_capture_screenshot(self, page: Page):
+        self.async_tasks["screenshot_event"].clear()
         self.captured_screenshot_urls.append(page.url)
 
-        if self.task.curr_step.id in self.captured_screenshot_ids:
+        current_step = self.task.current
+
+        if current_step.id in self.captured_screenshot_ids:
             return
 
-        path = f"{self.data_manager.curr_task_output}/{self.task.curr_step.id}.png"
-        self.task.curr_step.screenshot_path = path
-        await self.crawler.page.screenshot(path=path, full_page=True)
-        self.captured_screenshot_ids.append(self.task.curr_step.id)
+        current_step.screenshot_path = f"{self.data_manager.curr_task_output}/{current_step.id}.png"
+        await self.crawler.page.screenshot(path=current_step.screenshot_path, full_page=True)
+        self.captured_screenshot_ids.append(current_step.id)
+
+        self.async_tasks["screenshot_event"].set()
 
     async def hook_console(self, msg: ConsoleMessage):
         if action := await catch_console_injections(msg, print_injection=self.print_injection):
@@ -86,12 +94,18 @@ class CaptureAsync(Capture):
 
     def setup_page_hooks(self, page: Page):
         # first create events that hooks may need
-        self.events["screenshot_event"] = asyncio.Condition()
+        self.async_tasks["screenshot_event"] = asyncio.Event()
 
         # captures actions from injections
         page.on("console", self.hook_console)
         # things that need to happen on page change
         page.on("domcontentloaded", self.hook_dom_group)
+
+        # hooks that are only helpful when understanding the lifecycle of page/frames
+        # page.on("framenavigated", log_hook("framenavigated"))
+        # page.on("domcontentloaded", log_hook("domcontentloaded"))
+        # page.on("frameattached", log_hook("frameattached"))
+        # page.on("requestfinished", log_hook("requestfinished"))
 
     async def start(self, crawler: Crawler, start_page: str = None) -> Page:
         self.crawler = crawler
@@ -166,7 +180,6 @@ class MachineCaptureAsync(MachineCapture):
         actions_taken = []
 
         # self._cur_actions_len = len(self.actions)
-        self._curr_step = step
         self._curr_actions = step.actions
 
         await self.llm_assist_hook(page=page)

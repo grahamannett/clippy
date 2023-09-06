@@ -6,7 +6,8 @@ from playwright.async_api import Request, Route
 
 import atexit
 
-from clippy.utils.async_tools import run_async_func, allow_async, _allow_nested_loop
+from clippy.utils.async_tools import run_async_func, _allow_nested_loop
+from clippy.constants import action_delay
 
 
 async def ainput(string: str) -> str:
@@ -42,7 +43,7 @@ async def pause_crawler(page):
 
 async def all_cmd_input(page):
     user_input = None
-    await asyncio.sleep(3)
+    await asyncio.sleep(action_delay)
 
     while user_input != "q":
         # user_input = input("enter command\n")

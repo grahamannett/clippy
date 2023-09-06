@@ -16,7 +16,8 @@ class LMTasks:
 
 @dataclass
 class SummaryTask(LMTasks):
-    prompt = summary_stub
+    # prompt = summary_stub
+    pass
 
 
 @dataclass

@@ -1,11 +1,9 @@
-from typing import Callable, Coroutine
-from functools import wraps, partial
 import asyncio
-
 import time
+from functools import partial, wraps
+from typing import Callable, Coroutine, Awaitable
 
-
-use_async = False
+from loguru import logger
 
 
 def run_async_func(func: Coroutine):
@@ -14,6 +12,7 @@ def run_async_func(func: Coroutine):
 
 
 def allow_async(func):
+    use_async = False
     if not use_async:
         return func
 
