@@ -100,8 +100,8 @@ var trackClick = function (inputEvent) {
 
   const boundingBox = {
     ...inputEvent.target.getBoundingClientRect().toJSON(),
-    scrollX: window.scrollX,
-    scrollY: window.scrollY,
+    scroll_x: window.scrollX,
+    scroll_y: window.scrollY,
   }
 
   checkIfScrolled()

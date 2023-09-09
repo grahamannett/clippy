@@ -1,9 +1,75 @@
-from typing import Any, Callable
-import json
-import cohere
+from __future__ import annotations
 
+import json
 from collections import UserDict, UserList
+from dataclasses import dataclass
+from typing import Any, Callable
+
+from cohere.error import CohereError
+from cohere import responses
+
 from clippy.controllers.utils import truncate_left
+
+# class CohereObject
+
+
+@dataclass
+class Embeddings:
+    embeddings: list[list[float]]
+    meta: dict
+
+    id: str = None
+
+
+@dataclass
+class Tokens:
+    id: str
+    tokens: list[int]
+    token_strings: list[str]
+    meta: dict
+
+
+@dataclass
+class TokenLikelihood:
+    token: str
+    likelihood: float
+
+
+@dataclass
+class Generation:
+    id: str  # uuid
+    prompt: str
+    text: str
+    likelihood: float
+    finish_reason: str
+    token_likelihoods: list[TokenLikelihood]
+
+    @classmethod
+    def from_response(cls, resp: responses.Generations) -> Generation:
+        return cls(
+            id=resp.id,
+            prompt=resp.prompt,
+            text=resp.text,
+            likelihood=resp.likelihood,
+            finish_reason=resp.finish_reason,
+            token_likelihoods=[TokenLikelihood(token=v.token, likelihood=v.likelihood) for v in resp.token_likelihoods],
+        )
+
+
+@dataclass
+class Generations:
+    # generations: list
+    generations: list[Generation]
+    meta: dict
+    return_likelihoods: str
+
+    @classmethod
+    def from_response(cls, resp: responses.Generations) -> Generations:
+        return cls(
+            generations=[Generation.from_response(vals) for vals in resp.generations],
+            meta=resp.meta,
+            return_likelihoods=resp.return_likelihoods,
+        )
 
 
 class CohereJSONEncoder(json.JSONEncoder):
@@ -43,7 +109,7 @@ def make_fn(generate_func, tokenize_func, model):
                     prompt=prompt, max_tokens=0, model=model, return_likelihoods=return_likelihoods
                 )
                 return (response.generations[0].likelihood, option)
-            except cohere.error.CohereError as e:
+            except CohereError as e:
                 print(f"Cohere fucked up: {e}")
                 continue
             except ConnectionError as e:
@@ -53,9 +119,9 @@ def make_fn(generate_func, tokenize_func, model):
     return _fn
 
 
-def _generate_func(co_client: cohere.Client) -> Callable:
+def _generate_func(co_client: "cohere.Client") -> Callable:
     return co_client.generate
 
 
-def _tokenize_func(co_client: cohere.Client) -> Callable:
+def _tokenize_func(co_client: "cohere.Client") -> Callable:
     return co_client.tokenize

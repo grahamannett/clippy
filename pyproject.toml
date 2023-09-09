@@ -20,6 +20,7 @@ dependencies = [
     "opencv-python>=4.8.0.76",
     "transformers>=4.32.0",
     "sentencepiece>=0.1.99",
+    "loguru>=0.7.1",
 ]
 requires-python = ">=3.11"
 readme = "README.md"
@@ -33,7 +34,7 @@ build-backend = "pdm.backend"
 server = { shell = "cd src/trajlab && reflex run" }
 
 [tool.pdm.dev-dependencies]
-test = ["pytest>=7.4.0"]
+test = ["pytest>=7.4.1"]
 
 [tool.pytest.ini_options]
 # ignore warnings not from clippy

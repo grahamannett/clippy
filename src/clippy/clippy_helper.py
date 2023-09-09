@@ -2,17 +2,17 @@ import asyncio
 from argparse import Namespace
 from distutils.util import strtobool
 from os import environ
-from typing import Awaitable, Dict, List
+from pathlib import Path
+from typing import Dict, List
 
 from loguru import logger
-from playwright.async_api import Page
-
 from clippy import constants
 from clippy.capture import CaptureAsync, MachineCaptureAsync
 from clippy.crawler.crawler import Crawler
 from clippy.crawler.parser.dom_snapshot import DOMSnapshotParser, Locators
 from clippy.dm.data_manager import DataManager
-from clippy.states import Task
+from clippy.dm.db_utils import Database
+from clippy.states import Task, Action
 from clippy.instructor import Instructor, NextAction
 from clippy.utils._input import _get_input
 
@@ -40,6 +40,7 @@ class Clippy:
 
     # async_tasks means background processes, not a clippy `Task`
     async_tasks: Dict[str, asyncio.Task | asyncio.Event | asyncio.Condition] = {}
+    used_next_actions: List[NextAction] = []
 
     def __init__(
         self,
@@ -47,13 +48,17 @@ class Clippy:
         start_page: str = constants.default_start_page,
         headless: bool = False,
         key_exit: bool = True,
+        confirm: bool = False,
         pause_start: bool = True,
         clear_step_states: bool = False,
-        data_dir: str = "data/tasks",
+        data_dir: str = "data/",
+        data_manager_path: str = "data/tasks",
+        database_path: str = "data/db/db.json",
     ):
         # gui related settings
         self.headless = headless
         self.key_exit = key_exit
+        self.confirm = confirm
         self.pause_start = pause_start
         self.keep_device_ratio = _device_ratio_check()
 
@@ -61,7 +66,10 @@ class Clippy:
         self.objective = objective
 
         self.clear_step_states = clear_step_states
-        self.data_manager = DataManager(data_dir=data_dir)  # data manager handles tasks/steps/dataclasses
+        self.data_dir = Path(data_dir)
+        self.data_manager_path = Path(data_manager_path)  # data manager handles tasks/steps/dataclasses
+        self.database_path = Path(database_path)  # database handles json storage
+        self.data_manager = DataManager(self.data_manager_path, self.database_path)
 
         self.DEBUG = strtobool(environ.get("DEBUG", "False"))
 
@@ -135,13 +143,7 @@ class Clippy:
             self.async_tasks["crawler_pause"] = self.crawler.pause_task
 
         if self.key_exit:
-            task = self.crawler.add_background_task(self.crawler.allow_end_early(), "key_exit")
-
-            # # TODO make clearer
-            # if ("key_exit" in self.async_tasks) and (self.async_tasks["key_exit"] != task):
-            #     breakpoint()
-
-            self.async_tasks["key_exit"] = task
+            self.async_tasks["key_exit"] = self.crawler.add_background_task(self.crawler.allow_end_early(), "key_exit")
 
         if goto_start_page:
             await page.goto(self.start_page)
@@ -149,7 +151,7 @@ class Clippy:
 
     async def end_capture(self):
         await self.crawler.end()
-        self.data_manager.save(task=self.task)
+        self.data_manager.save()
 
     async def run_assist(self, **kwargs):
         raise NotImplementedError
@@ -160,6 +162,21 @@ class Clippy:
         # if we capture we dont want to close browser so we will await on pause_start
         await self.async_tasks["pause_start"]
         await self.end_capture()
+
+    async def run_auto(self, user_confirm: bool = True, **kwargs):
+        self.page = await self.start_capture()
+
+        while True:
+            next_action = await self.suggest_action()
+            if user_confirm:
+                task_select = _get_input("Confirm action (q/b/*): ")
+                if task_select == "q":
+                    await self.end_capture()
+                    exit()
+                elif task_select == "b":
+                    breakpoint()
+
+            await self.use_action(next_action)
 
     def run_replay(self, class_handler: MachineCaptureAsync):
         def _replay(use_llm: bool, no_confirm: bool, **kwargs):
@@ -198,14 +215,12 @@ class Clippy:
         Returns:
             None
         """
-        logger.info("in use_action")
+        self.used_next_actions.append(action)
         self.async_tasks["screenshot_event"].clear()
 
-        logger.info("check loc")
         if hasattr(action, "locator"):
             await action.locator.first.scroll_into_view_if_needed()
 
-        logger.info("execute action")
         await self.crawler.execute_action(action)
 
     async def get_elements(self, filter_elements: bool = True):
@@ -219,32 +234,39 @@ class Clippy:
 
         return elements
 
-    async def suggest_action(self, num_elems: int = 100, previous_commands: List[str] = None) -> NextAction:
+    async def suggest_action(
+        self, num_elems: int = 100, previous_commands: List[str] = [], filter_elements: bool = True
+    ) -> NextAction:
         instructor = Instructor(use_async=True)
         self.dom_parser = DOMSnapshotParser(self.crawler)  # need cdp_client and page so makes sense to use crawler
+        title = await self.crawler.title
 
         previous_commands = self._get_previous_commands(previous_commands)
 
         # get all the links/actions -- TODO: should these be on the instructor?
         # filter out text/images that are not actionable
         elements = await self.get_elements(filter_elements=True)
-        elements = elements[:num_elems]
 
-        title = await self.crawler.title
-        logger.info(f"for `{title[:20]}` filtering {len(elements)} elements...")
-        filtered_elements = await instructor.filter_actions(
-            elements,
-            self.objective,
-            title,
-            self.crawler.url,
-            previous_commands=previous_commands,
-            max_elements=10,
-            temperature=0.0,
-        )
+        if num_elems:
+            elements = elements[:num_elems]
 
-        logger.info(f"generating response with {len(filtered_elements)} elements...")
+        if filter_elements:
+            logger.info(f"for `{title[:20]}` filtering {len(elements)} elements...")
+            filtered_elements = await instructor.filter_actions(
+                elements,
+                self.objective,
+                title,
+                self.crawler.url,
+                previous_commands=previous_commands,
+                max_elements=10,
+                temperature=0.0,
+            )
+
+            elements = filtered_elements
+
+        logger.info(f"generating response with {len(elements)} elements...")
         generated_response = await instructor.generate_next_action(
-            filtered_elements,
+            elements,
             self.objective,
             title,
             self.crawler.url,
@@ -268,13 +290,23 @@ class Clippy:
         return loc
 
     def _get_previous_commands(self, previous_commands: List[str] = []):
+        next_action_idx = 0
         if len(self.task.steps) >= 1:
             for step in self.task.steps:
                 for action in step.actions:
-                    _last_cmd = f"{action.action} {action.locator_id}"
-                    if action.action_args:
-                        _last_cmd += f" - {action.action_args}"
-                    previous_commands.append(_last_cmd)
+                    if not isinstance(action, Action):
+                        breakpoint()
+                        raise Exception("action is not an Action")
+
+                    gen_action = self.used_next_actions[next_action_idx]
+                    last_cmd = f"{action.__class__.__name__} {gen_action.element_id}"
+
+                    if gen_action.action_args:
+                        last_cmd += f" - {gen_action.action_args}"
+
+                    next_action_idx += 1
+                    previous_commands.append(last_cmd)
+
         return previous_commands
 
     async def _get_locators_elements(self, num_elems: int = 150):

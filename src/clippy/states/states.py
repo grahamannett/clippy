@@ -7,7 +7,7 @@ from playwright.async_api import Frame, Page
 from playwright.sync_api import Frame as FrameSync
 from playwright.sync_api import Page as PageSync
 
-from clippy.states.actions import Action
+from clippy.states.actions import Action, Actions
 from clippy.states.base import ModelBase
 from clippy.constants import max_url_length
 
@@ -27,8 +27,8 @@ class Step(ModelBase):
         The list of actions to be performed in this step. Defaults to an empty list.
     """
 
-    url: str | None
-    id: str | uuid.UUID = None
+    url: str
+    id: Optional[str | uuid.UUID] = None
     actions: List[Action] = field(default_factory=list)
 
     def __post_init__(self):
@@ -85,7 +85,7 @@ class Step(ModelBase):
         step = cls(**data)
 
         for action_dict in actions:
-            ActType = Action[action_dict.pop("type")]
+            ActType = Actions[action_dict.pop("type")]
             action = ActType(**action_dict)
             step.actions.append(action)
         return step
@@ -107,7 +107,7 @@ class Step(ModelBase):
         merged_actions = [self.actions.pop(0)]
 
         for idx, action in enumerate(self.actions):
-            if isinstance(action, merged_actions[-1]) and (merged_actions[-1].should_merge(action)):
+            if isinstance(action, merged_actions[-1].__class__) and (merged_actions[-1].should_merge(action)):
                 merged_actions[-1].update(action)
             else:
                 merged_actions.append(action)
@@ -164,7 +164,7 @@ class Task(ModelBase):
     curr_step: Step = None
     timestamp: datetime | str = str(datetime.now())
 
-    def __call__(self, action: Action = None, step: Step = None, **kwargs) -> None:
+    def __call__(self, action: Action, **kwargs) -> None:
         """
         Method to add an action to the current step of the task.
 
@@ -292,7 +292,7 @@ class Task(ModelBase):
         """
         return self.__repr__()
 
-    async def page_change_async(self, page: Page | Frame | str) -> Step:
+    async def page_change_async(self, *args, **kwargs) -> Step | None:
         """
         Asynchronous method to handle page change.
 
@@ -301,9 +301,9 @@ class Task(ModelBase):
         page : Page | Frame | str
             The new page.
         """
-        return self.page_change(page=page)
+        return self.page_change(*args, **kwargs)
 
-    def page_change(self, page: Page | Frame = None, url: str = None) -> Step:
+    def page_change(self, page: Page | Frame = None, url: str = None) -> Step | None:
         """
         Method to handle page change.
 
@@ -314,7 +314,7 @@ class Task(ModelBase):
         url : str, optional
             The URL of the new page. Defaults to None.
         """
-        if page:
+        if page is not None:
             url = page.url
 
         if not self._is_new_page(url):

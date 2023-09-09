@@ -1,19 +1,13 @@
+from __future__ import annotations
+
 import asyncio
 import sys
 from typing import Awaitable
 
 from loguru import logger
-
-# async types and functions
 from playwright.async_api import Browser, BrowserContext, CDPSession, Page, PlaywrightContextManager
 
-from clippy.constants import (
-    action_delay,
-    default_preload_injection_script,
-    default_user_agent,
-    default_viewport_size,
-    input_delay,
-)
+from clippy.constants import default_preload_injection_script, default_user_agent, default_viewport_size, input_delay
 from clippy.crawler.selectors import Selector
 
 

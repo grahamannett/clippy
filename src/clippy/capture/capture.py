@@ -98,7 +98,7 @@ class MachineCapture(Capture):
             return page.mouse.click(*action.position)
 
         ss_path = self.ss_match.get_latest_screenshot_path(
-            data_dir=self.data_manager.data_dir, task_id=self.task.id, step_id=self.data_manager.task.id
+            data_dir=self.data_manager.data_dir_task, task_id=self.task.id, step_id=self.data_manager.task.id
         )
         action_template_out_file = self.ss_match.get_action_template(action=action, screenshot_path=ss_path)
         middle_point = self.ss_match.get_point_from_template(page=page)

@@ -1,10 +1,38 @@
-import json
-from dataclasses import asdict, dataclass
-from typing import Any, Awaitable, List, Type
+from __future__ import annotations
 
-from playwright.async_api import Page
+import json
+from dataclasses import asdict, dataclass, field, asdict
+from typing import Any, Awaitable, List, Optional, Type
+
+from playwright.async_api import Page, Locator
 
 # NOTE: Using camelCase so it matches more closely with js
+
+
+# these are dataclasses rather than named tuple so I can attach objects to them
+@dataclass
+class NextAction:
+    action: str
+    element_id: int = None
+    element_metadata: str = None
+    action_args: str = None
+
+    locator: Locator = None
+    # needed if we score all actions
+    score: float = None
+
+
+@dataclass
+class ActionMetadata:
+    """action metadata class.
+    seperate from action as it needs to have @dataclass but do not want to include
+    the other various fields e.g. prev, data, allow_merge
+    """
+
+    action_type: str = field(default=None, repr=False)
+
+    def __post_init__(self):
+        self.action_type = self.__class__.__name__.lower()
 
 
 class Action:
@@ -78,9 +106,13 @@ class Action:
         """
         pass
 
+    def update(self, action: "Action") -> "Action":
+        """base function to update an action"""
+        return self
+
 
 @dataclass
-class Position:
+class Position(ActionMetadata):
     """
     A class to represent a position with x and y coordinates.
     """
@@ -90,25 +122,25 @@ class Position:
 
 
 @dataclass
-class BoundingBox:
+class BoundingBox(ActionMetadata):
     """
     A class to represent a bounding box.
     """
 
-    x: float  # x-coordinate
-    y: float  # y-coordinate
+    x: Optional[float] = None  # x-coordinate
+    y: Optional[float] = None  # y-coordinate
 
-    width: float  # Width of the bounding box
-    height: float  # Height of the bounding box
+    width: Optional[float] = None  # Width of the bounding box
+    height: Optional[float] = None  # Height of the bounding box
 
-    bottom: float  # Bottom coordinate of the bounding box
-    top: float  # Top coordinate of the bounding box
+    bottom: Optional[float] = None  # Bottom coordinate of the bounding box
+    top: Optional[float] = None  # Top coordinate of the bounding box
 
-    left: float  # Left coordinate of the bounding box
-    right: float  # Right coordinate of the bounding box
+    left: Optional[float] = None  # Left coordinate of the bounding box
+    right: Optional[float] = None  # Right coordinate of the bounding box
 
-    scrollX: float  # Scroll position in the x-direction
-    scrollY: float  # Scroll position in the y-direction
+    scroll_x: Optional[float] = None  # Scroll position in the x-direction
+    scroll_y: Optional[float] = None  # Scroll position in the y-direction
 
     def scale(self, scale: float) -> "BoundingBox":
         """
@@ -124,6 +156,7 @@ class BoundingBox:
         BoundingBox
             The scaled bounding box.
         """
+        assert self.width and self.height and self.x and self.y
         width = int(self.width * scale)
         height = int(self.height * scale)
 
@@ -131,9 +164,9 @@ class BoundingBox:
         y = self.y - int((height - self.height) / 2)
 
         if (x < 0) or (y < 0):
-            print("WARNING: negative value... not sure if ss is correct")
+            print("WARNING: negative value... not sure if screenshot is correct")
 
-        return BoundingBox(x, y, width, height)
+        return BoundingBox(x=x, y=y, width=width, height=height)
 
     def to_dict(self) -> dict:
         """
@@ -148,16 +181,16 @@ class BoundingBox:
 
 
 @dataclass
-class Click(Action):
+class Click(ActionMetadata, Action):
     """
     A class to represent a click action.
     """
 
-    x: int = None  # x-coordinate of the click
-    y: int = None  # y-coordinate of the click
-    selector: str = None  # Selector of the element to click
-    python_locator: str = None  # Python locator of the element to click
-    bounding_box: BoundingBox | str = None  # Bounding box of the element to click
+    x: Optional[int] = None  # x-coordinate of the click
+    y: Optional[int] = None  # y-coordinate of the click
+    selector: Optional[str] = None  # Selector of the element to click
+    python_locator: Optional[str] = None  # Python locator of the element to click
+    bounding_box: Optional[BoundingBox | str | dict] = None  # Bounding box of the element to click
 
     def __post_init__(self):
         """
@@ -170,7 +203,8 @@ class Click(Action):
             if isinstance(self.bounding_box, str):
                 self.bounding_box = json.loads(self.bounding_box)
 
-            self.bounding_box = BoundingBox(**self.bounding_box)
+            if isinstance(self.bounding_box, dict):
+                self.bounding_box = BoundingBox(**self.bounding_box)
 
     def callback(self, page: Page, path: str) -> Awaitable:
         """
@@ -183,6 +217,9 @@ class Click(Action):
         path : str
             The path to save the screenshot to.
         """
+        if not self.selector:
+            raise ValueError("No selector on click for callback")
+
         element = page.locator(self.selector)
         return element.screenshot(path=path)
 
@@ -200,33 +237,37 @@ class Click(Action):
             The scale factor for the screenshot, by default 1.0
         """
         # elements = page.locator(self.selector).all()
+        if not self.selector:
+            raise ValueError("No selector on click for capture element")
+
         elements = await page.locator(self.selector).all()
 
         if elements is None:
             print("WARNING: NO ELEMENT FOUND FOR SCREENSHOT")
             return
 
-            # print("WARNING: multiple elements found for screenshot... not sure if selector is correct")
+        # print("WARNING: multiple elements found for screenshot... not sure if selector is correct")
         element = elements[0]
 
         if element is None:
             print("WARNING: element not found for screenshot")
             return None
 
-        bbox = BoundingBox(**(await element.bounding_box()))
+        bbox = await element.bounding_box()
+        bbox = BoundingBox(**bbox)
         screenshot = await page.screenshot(path=path, clip=bbox.scale(scale).to_dict())
         return screenshot
 
 
 @dataclass
-class Input(Action):
+class Input(ActionMetadata, Action):
     """
     A class to represent an input action.
     """
 
-    value: str = None  # The value to input
-    x: int = None  # x-coordinate of the input
-    y: int = None  # y-coordinate of the input
+    value: Optional[str] = None  # The value to input
+    x: Optional[int] = None  # x-coordinate of the input
+    y: Optional[int] = None  # y-coordinate of the input
 
     def __post_init__(self):
         """
@@ -236,7 +277,7 @@ class Input(Action):
         self.position = Position(self.x, self.y)
         self.allow_merge = True
 
-    def update(self, action: "Input"):
+    def update(self, action: "Input") -> "Input":
         """
         Updates the value of the input.
 
@@ -246,6 +287,7 @@ class Input(Action):
             The action to update the value from.
         """
         self.value = action.value
+        return self
 
     def check_merge(self, action: "Input") -> bool:
         """
@@ -265,7 +307,7 @@ class Input(Action):
 
 
 @dataclass
-class Enter(Action):
+class Enter(ActionMetadata, Action):
     """
     A class to represent an enter action.
     """
@@ -274,7 +316,7 @@ class Enter(Action):
 
 
 @dataclass
-class Wheel(Action):
+class Wheel(ActionMetadata, Action):
     """
     A class to represent a wheel action.
     """
@@ -289,7 +331,7 @@ class Wheel(Action):
         super().__post_init__()
         self.allow_merge = True
 
-    def update(self, action: "Wheel"):
+    def update(self, action: "Wheel") -> "Wheel":
         """
         Updates the delta values of the wheel action.
 
@@ -329,8 +371,8 @@ class Actions(Action):
     # to allow Actions.Action for type hinting/isinstance
     Action: Type[Action] = Action  # Type hint for Action
 
-    def __new__(cls, class_name: str, *args, **kwargs) -> Action:
-        breakpoint()
+    def __new__(cls, action_type: str, *args, **kwargs) -> Action:
+        return cls.__dict__[action_type](*args, **kwargs)
 
     def __class_getitem__(cls, class_name: str) -> Type[Action]:
         """

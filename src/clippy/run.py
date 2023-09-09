@@ -25,6 +25,7 @@ def get_args():
     common.add_argument("--start_page", type=str, default=default_start_page)
     common.add_argument("--random_task", action="store_true", default=False)
     common.add_argument("-nk", "--no_keyexit", action="store_true", default=False)
+    common.add_argument("--confirm", action="store_true", default=False)
 
     parser = argparse.ArgumentParser(description="🤠 clippy")
 
@@ -42,6 +43,8 @@ def get_args():
     # GET' EM ---
     args = parser.parse_args()
 
+    breakpoint()
+
     return args
 
 
@@ -55,6 +58,7 @@ def run():
         headless=args.headless,
         start_page=args.start_page,
         key_exit=not args.no_keyexit,
+        confirm=args.confirm,
     )
 
     clippy.check_command(cmd=args.cmd)

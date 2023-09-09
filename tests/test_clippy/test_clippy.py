@@ -65,24 +65,23 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
 
     async def test_capture_clippy(self):
         clippy = self.clippy
-        # clippy.headless = True
-
+        clippy.headless = False
         clippy.objective = "go to the new posts page on hackernews"
-
         page = await clippy.start_capture(goto_start_page=True)
+
         action = await clippy.suggest_action()
         logger.info(f"Using action: {action}")
-        breakpoint()
         await clippy.use_action(action)
         await clippy.wait_until("screenshot_event")
         logger.info("Check page title")
+        breakpoint()
 
         await expect(page).to_have_title("New Links | Hacker News")
 
         logger.info(f"Suggest Action for {page.url[:50]}")
         action = await clippy.suggest_action()
+        breakpoint()
         await clippy.use_action(action)
-
         await asyncio.sleep(1)
 
     async def test_capture_steps(self):
@@ -115,6 +114,11 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
 
         page = await clippy.start_capture(goto_start_page=True)
         action = await clippy.suggest_action(previous_commands=["type input 9 body wash"])
+
+
+class TestClippy(unittest.IsolatedAsyncioTestCase):
+    def test_get_previous_actions(self):
+        pass
 
 
 class TestMockedResponses(unittest.IsolatedAsyncioTestCase):

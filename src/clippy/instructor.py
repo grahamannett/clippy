@@ -1,34 +1,17 @@
 import asyncio
-from dataclasses import dataclass
-from os import environ
-from typing import List, Optional
 import json
-from loguru import logger
-import cohere
+from dataclasses import dataclass
+from typing import List
 
+from loguru import logger
 from playwright.async_api import Locator, Page
 
 from clippy.controllers.apis.cohere_controller import CohereController, Responses
 from clippy.crawler.parser.dom_snapshot import get_action_type
-from clippy.stubs.stubs import StubHelper, StubTemplates
+from clippy.states import NextAction
+from clippy.stubs.stubs import StubTemplates
 
 action_options = [{"next_command": "click"}, {"next_command": "type"}]
-
-
-# these are dataclasses rather than named tuple so I can attach objects to them
-@dataclass
-class NextAction:
-    action: str
-    element_id: int = None
-    element_metadata: str = None
-    action_args: str = None
-
-    locator: Locator = None
-    # needed if we score all actions
-    score: float = None
-
-    def to_action(self):
-        return
 
 
 class Instructor:
@@ -101,7 +84,6 @@ class Instructor:
             return_likelihoods=return_likelihoods,
             temperature=temperature,
         )
-        breakpoint()
         return response
 
     async def filter_actions(

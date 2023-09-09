@@ -23,6 +23,9 @@ class Controller:
     class Clients:
         pass
 
+    class config:
+        model: str = None
+
     _is_async: bool = False
     _n_workers: int = 16
     _return_full: bool = False
@@ -30,7 +33,6 @@ class Controller:
     # ---
     client_exception: Exception = None
     client_exception_message: str = None
-    model: str = None
 
     def __init__(self, *args, **kwargs):
         self._check()
@@ -39,7 +41,7 @@ class Controller:
         return getattr(self.client, name)
 
     def _check(self):
-        if self.conf.model is None:
+        if self.config.model is None:
             print("WARNING: Model not set, probably needed for api")
 
     async def generate(self, prompt: str, *args, **kwargs):
