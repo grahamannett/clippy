@@ -11,6 +11,8 @@ from clippy.states.actions import Action, Actions
 from clippy.states.base import ModelBase
 from clippy.constants import max_url_length
 
+UUID_NAMESPACE = uuid.NAMESPACE_OID
+
 
 @dataclass
 class Step(ModelBase):
@@ -30,6 +32,7 @@ class Step(ModelBase):
     url: str
     id: Optional[str | uuid.UUID] = None
     actions: List[Action] = field(default_factory=list)
+    timestamp: str | datetime = str(datetime.now())
 
     def __post_init__(self):
         """
@@ -39,7 +42,8 @@ class Step(ModelBase):
             # note: if a page updates and the url does not change then id will be same
             # this will be an issue later. will have to resolve it by understanding when
             # exactly to screenshot
-            self.id = str(uuid.uuid5(uuid.NAMESPACE_URL, self.url))
+            # trying to think about this... implication of this is different tasks make have steps with similar ID's
+            self.id = str(uuid.uuid5(UUID_NAMESPACE, self.url))
 
     def __call__(self, action: Action, **kwargs) -> None:
         """
@@ -159,10 +163,17 @@ class Task(ModelBase):
     """
 
     objective: str
-    id: str | None = str(uuid.uuid4())
+    id: Optional[str] = None
     steps: List[Step] = field(default_factory=list)
-    curr_step: Step = None
-    timestamp: datetime | str = str(datetime.now())
+    curr_step: Optional[Step] = None
+    timestamp: str | datetime = str(datetime.now())
+
+    def __post_init__(self):
+        """
+        Post-initialization method. Generates a unique ID for the step if not provided.
+        """
+        if self.id is None:
+            self.id = str(uuid.uuid5(UUID_NAMESPACE, self.objective))
 
     def __call__(self, action: Action, **kwargs) -> None:
         """
