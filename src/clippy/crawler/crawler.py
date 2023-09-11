@@ -32,7 +32,7 @@ class Crawler:
         is_async: bool = True,
         headless: bool = False,
         clippy: "Clippy" = None,
-    ):
+    ) -> None:
         self._started = False
         self.is_async = is_async
         self.headless = headless
@@ -42,8 +42,8 @@ class Crawler:
             self.async_tasks = self.clippy.async_tasks
             self.async_tasks["crawler_pause"] = None
 
-    async def __aenter__(self):
-        await self.start(use_instance_properties=True)
+    async def __aenter__(self) -> Crawler:
+        await self.start()
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
@@ -63,7 +63,7 @@ class Crawler:
             task = self.pause()
         return task
 
-    def pause(self, page: Page = None) -> asyncio.Task:
+    def pause(self, page: Page | None = None) -> asyncio.Task:
         if task := self.async_tasks["crawler_pause"]:
             return task
 
@@ -82,15 +82,17 @@ class Crawler:
         if hasattr(self, "ctx_manager"):
             await self.ctx_manager.__aexit__()
 
-    def _end_sync(self):
-        self.page.close()
-        self.browser.close()
-        if self.cdp_client:
-            self.cdp_client.detach()
-        self.ctx_manager.__exit__()
+    # def _end_sync(self):
+    #     self.page.close()
+    #     self.browser.close()
+    #     if self.cdp_client:
+    #         self.cdp_client.detach()
+    #     self.ctx_manager.__exit__()
 
-    def end(self) -> Awaitable[None] | None:
-        return self._end_async() if self.is_async else self._end_sync()
+    async def end(self) -> Awaitable[None] | None:
+        if not self.is_async:
+            raise Exception("end() can only be called in async mode")
+        return await self._end_async()
 
     async def init_without_ctx_manager(self):
         self.ctx_manager = PlaywrightContextManager()
@@ -98,7 +100,7 @@ class Crawler:
         return self
 
     async def start(self, inject_preload: bool = True):
-        self.is_async = True
+        self._started, self.is_async = True, True
         # ideally will make all this possible to use with then normal context manager
         # i.e. something like `with playwright as pw: self.pw = pw``
         await self.init_without_ctx_manager()

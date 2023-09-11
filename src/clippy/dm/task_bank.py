@@ -1,10 +1,11 @@
+from __future__ import annotations
+
 import random
+from collections import UserDict, UserList
 from pathlib import Path
-from itertools import cycle
+from typing import Any
 
 from jinja2 import Environment
-
-from collections import UserDict, UserList
 
 task_bank_dir = "src/taskgen/wordbank"
 task_base_format = "_base"
@@ -18,41 +19,45 @@ def _process_word_bank(word_bank: str) -> list[str]:
 
 
 class Words(UserList):
-    def __init__(self, words: list[str] = [], word_var: str = None):
+    def __init__(self, words: list[str] = [], word_var: str = None) -> None:
         super().__init__(words)
         self.word_var = word_var
 
-    def sample(self):
+    def sample(self, seed: int | None = None) -> Any:
+        if seed != None:
+            return self[seed % len(self)]
         return random.choice(self)
 
     @classmethod
-    def from_file(cls, file: Path):
+    def from_file(cls, file: str | Path):
         if isinstance(file, str):
             file = Path(file)
 
         word_var = file.name.split(word_bank_format)[0]
-        return cls(_process_word_bank(file), word_var)
+        return cls(_process_word_bank(file), word_var=word_var)
 
 
 class WordBank(UserDict):
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, _seed: int | None = None, **kwargs) -> None:
         super().__init__(**kwargs)
+        self._seed = _seed
 
     def __getattr__(self, key):
-        return self[key].sample()
+        return self[key].sample(self._seed)
 
 
 class TaskBankManager:
-    def __init__(self, task_bank_dir: str = task_bank_dir):
+    def __init__(self, task_bank_dir: str = task_bank_dir, seed: int | None = None) -> None:
         self.task_bank_dir = task_bank_dir
         self.tasks = []
-        self.wordbank = WordBank()
+        self._seed = seed
+        self.wordbank = WordBank(self._seed)
 
     def __len__(self):
         return len(self.tasks)
 
-    def __iter__(self):
-        self._task_iter = cycle(self.tasks)
+    def __iter__(self) -> TaskBankManager:
+        self._task_iter = iter(self.tasks)
         return self
 
     def __next__(self):
@@ -64,19 +69,21 @@ class TaskBankManager:
 
         self.task_templates_file = f"{self.task_bank_dir}/task{task_base_format}"
         with open(self.task_templates_file) as f:
-            tasks_raw = f.read().splitlines()
+            self.tasks_raw = f.read().splitlines()
 
-        self.tasks_raw = tasks_raw
-
+        self.env = Environment()
         for task in self.tasks_raw:
-            template = Environment().from_string(task)
+            template = self.env.from_string(task)
             self.tasks.append(template)
 
-    def _process_word_banks(self):
+    def _process_word_banks(self) -> None:
         for file in Path(self.task_bank_dir).iterdir():
             if file.name.endswith(word_bank_format):
                 words = Words.from_file(file)
                 self.wordbank[words.word_var] = words
 
-    def sample(self):
-        return random.choice(self.tasks).render(wordbank=self.wordbank)
+    def sample(self, idx: int | None = None) -> str:
+        if idx is None:
+            idx = random.randint(0, len(self.tasks) - 1)
+
+        return self.tasks[idx].render(wordbank=self.wordbank)

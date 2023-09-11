@@ -154,9 +154,10 @@ function debounceEvent(func, delay, trackKey, keys) {
 
 // use change over input because connecting input together seems like it could be problematic
 // document.addEventListener("change", makeTrackInput("Change"))
-window.addEventListener("input", makeTrackInput("Input"))
-window.addEventListener("click", trackClick)
-document.addEventListener("keydown", trackEnter) // do this on document not window
+// need {useCapture: true} to capture events before they may impact page
+window.addEventListener("input", makeTrackInput("Input"), true)
+window.addEventListener("click", trackClick, true)
+document.addEventListener("keydown", trackEnter, true) // do this on document not window
 
 // need debounce for these events
 // document.addEventListener(

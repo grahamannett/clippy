@@ -1,15 +1,16 @@
-"""Welcome to Reflex! This file creates a counter app."""
+from typing import List, Optional
 import random
 
 import reflex as rx
 
-from clippy import var1
+from trajlab.models import Task
 
 
 class State(rx.State):
     """The app state."""
 
     count = 0
+    tasks: Optional[List[Task]] = None
 
     def increment(self):
         """Increment the count."""
@@ -25,29 +26,7 @@ class State(rx.State):
 
 
 def index() -> rx.Component:
-    return rx.center(
-        rx.vstack(
-            rx.text("Welcome to Reflex!" + str(var1)),
-            rx.heading(State.count),
-            rx.hstack(
-                rx.button("Decrement", on_click=State.decrement, color_scheme="red"),
-                rx.button(
-                    "Randomize",
-                    on_click=State.random,
-                    background_image="linear-gradient(90deg, rgba(255,0,0,1) 0%, rgba(0,176,34,1) 100%)",
-                    color="white",
-                ),
-                rx.button("Increment", on_click=State.increment, color_scheme="green"),
-            ),
-            padding="1em",
-            bg="#ededed",
-            border_radius="1em",
-            box_shadow="lg",
-        ),
-        padding_y="5em",
-        font_size="2em",
-        text_align="center",
-    )
+    return rx.vstack(rx.foreach(State.get_trajectories, show_trajectory_menu_item))
 
 
 # Add state and page to the app.

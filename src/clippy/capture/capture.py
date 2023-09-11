@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Awaitable, Dict
+from typing import Any, Awaitable, Coroutine, Dict
 
 from playwright.async_api import Page
 
@@ -38,14 +38,14 @@ class Capture:
             self.async_tasks = self.clippy.async_tasks
 
     @property
-    def task(self):
+    def task(self) -> Task:
         return self.data_manager.task
 
-    def _input(self, text: str):
+    def _input(self, text: str) -> str:
         # used for mocking input
         return input(text)
 
-    def confirm_input(self, next_type: Action | Step, confirm: bool = True, **kwargs):
+    def confirm_input(self, next_type: Action | Step, confirm: bool = True, **kwargs) -> None:
         if not confirm:
             return
         print(f"next {next_type.__class__.__name__} will be:\n{next_type}\n" + "=" * 10)
@@ -93,9 +93,11 @@ class MachineCapture(Capture):
     def execute_press(self, action: Action, page: Page, **kwargs) -> Awaitable[None] | None:
         return page.keyboard.press(action.value, delay=self.input_delay)
 
-    def execute_click_with_screenshot(self, action: Action, page: Page, is_last_action: bool = False, **kwargs):
+    def execute_click_with_screenshot(
+        self, action: Actions.Click, page: Page, is_last_action: bool = False, **kwargs
+    ) -> Coroutine[Any, Any, None]:
         if not is_last_action:
-            return page.mouse.click(*action.position)
+            return page.mouse.click(action.x, action.y)
 
         ss_path = self.ss_match.get_latest_screenshot_path(
             data_dir=self.data_manager.data_dir_task, task_id=self.task.id, step_id=self.data_manager.task.id

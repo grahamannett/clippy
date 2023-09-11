@@ -6,14 +6,16 @@ from pathlib import Path
 from typing import Dict, List
 
 from loguru import logger
+
 from clippy import constants
 from clippy.capture import CaptureAsync, MachineCaptureAsync
-from clippy.crawler.crawler import Crawler
+from clippy.crawler.crawler import Crawler, Page
 from clippy.crawler.parser.dom_snapshot import DOMSnapshotParser, Locators
 from clippy.dm.data_manager import DataManager
-from clippy.dm.db_utils import Database
-from clippy.states import Task, Action
+from clippy.dm.task_bank import TaskBankManager
 from clippy.instructor import Instructor, NextAction
+from clippy.states import Action, Task
+from clippy.states.states import Step
 from clippy.utils._input import _get_input
 
 
@@ -36,7 +38,6 @@ class Clippy:
     crawler: Crawler
     capture: CaptureAsync
     data_manager: DataManager
-    task: Task
 
     # async_tasks means background processes, not a clippy `Task`
     async_tasks: Dict[str, asyncio.Task | asyncio.Event | asyncio.Condition] = {}
@@ -54,7 +55,9 @@ class Clippy:
         data_dir: str = "data/",
         data_manager_path: str = "data/tasks",
         database_path: str = "data/db/db.json",
-    ):
+        seed: int | None = None,
+        **kwargs,
+    ) -> None:
         # gui related settings
         self.headless = headless
         self.key_exit = key_exit
@@ -71,58 +74,65 @@ class Clippy:
         self.database_path = Path(database_path)  # database handles json storage
         self.data_manager = DataManager(self.data_manager_path, self.database_path)
 
+        self.tbm = TaskBankManager(seed=seed)
+        self.tbm.process_task_bank()
+
         self.DEBUG = strtobool(environ.get("DEBUG", "False"))
 
     @property
-    def page(self):
+    def page(self) -> Page | None:
         return getattr(self.crawler, "page", None)
 
     @property
-    def url(self):
+    def url(self) -> str | None:
         return getattr(self.crawler, "url", None)
 
     @property
-    def task(self):
+    def task(self) -> Task | None:
         if self.data_manager:
             return self.data_manager.task
 
         return None
 
-    async def start(self, args: Namespace):
+    async def run(self, args: Namespace) -> None:
         cmd = args.cmd
-        no_confirm = args.no_confirm
-        use_llm = args.llm
 
-        exec_type = _check_exec_type(args.exec_type, cmd)
+        func = {
+            "capture": self.run_capture,
+            "replay": self.run_replay,
+            "datamanager": self.data_manager.run,
+        }.get(cmd, None)
 
-        _go = {
-            "sync": {},
-            "async": {
-                "capture": self.run_capture,
-                "replay": self.run_replay(class_handler=MachineCaptureAsync),
-            },
-        }
-
-        func = _go[exec_type].get(cmd, None)
         if func is None:
-            raise Exception(f"`{cmd}` not supported in {exec_type} mode")
+            raise Exception(f"`{cmd}` not supported in {self.__class__.__name__} mode")
 
-        return await func(use_llm=use_llm, no_confirm=no_confirm)
+        return await func(**vars(args))
 
-    def check_command(self, cmd: str):
+    def check_command(self, cmd: str, kwargs: dict):
         match cmd:
             case "capture":
-                self._check_objective()
+                self._check_objective(kwargs)
 
-    def _check_objective(self):
-        if self.objective == constants.default_objective:
-            print("no objective set, please enter objective")
-            self.objective = self._get_input(self.objective)
+    def _check_objective(self, kwargs: dict) -> None:
+        # if we set task in kwargs then fetch it from task bank
 
-    async def wait_until(self, message: str = None, timeout: float = 0.5, **kwargs) -> None:
+        if (_task_sample := kwargs.get("task", None)) != None:
+            _task_sample = _task_sample if _task_sample >= 0 else None
+            self.objective = self.tbm.sample(_task_sample)
+            logger.info(f"Sampled task: {self.objective}")
+
+        if self.objective is constants.default_objective:
+            logger.info("Default objective is used. So need to ask user.")
+            self.objective = _get_input(self.objective)
+            if self.objective.startswith(("r", "random")):
+                self.objective = self.tbm.sample()
+                logger.info(f"Sampled task: {self.objective}")
+
+    async def wait_until(self, message: str = None, timeout: float = 1.0, **kwargs) -> None:
         # Ive tried a lot of things besides just sleeping but the order of stuff happening is not consistent
         # there is probably a better way to do this using async but would require knowing exactly what is happening
-        if event := self.async_tasks.get(message, None):
+        event = self.async_tasks.get(message, None)
+        if event is not None:
             if event.is_set():
                 event.clear()
 
@@ -157,14 +167,14 @@ class Clippy:
         raise NotImplementedError
 
     async def run_capture(self, **kwargs):
-        self.page = await self.start_capture()
-
+        await self.start_capture()
+        # breakpoint()
         # if we capture we dont want to close browser so we will await on pause_start
-        await self.async_tasks["pause_start"]
+        await self.async_tasks["crawler_pause"]
         await self.end_capture()
 
     async def run_auto(self, user_confirm: bool = True, **kwargs):
-        self.page = await self.start_capture()
+        page = await self.start_capture()
 
         while True:
             next_action = await self.suggest_action()
@@ -178,32 +188,31 @@ class Clippy:
 
             await self.use_action(next_action)
 
-    def run_replay(self, class_handler: MachineCaptureAsync):
-        def _replay(use_llm: bool, no_confirm: bool, **kwargs):
-            task = self.get_task_for_replay(self.data_manager.tasks)
-            capture = class_handler(
-                objective=self.objective, data_manager=self.data_manager, start_page=self.start_page, use_llm=use_llm
-            )
-            return capture.execute_task(task=task, no_confirm=no_confirm, **kwargs)
+    async def run_replay(self, **kwargs):
+        task = self.get_task_for_replay(self.data_manager.tasks)
+        self.start_page = task.steps[0].url
+        await self.start_capture(goto_start_page=True)
 
-        return _replay
+        for step in task.steps:
+            await self.execute_step(step)
 
-    def get_task_for_replay(self, tasks: List[Task]) -> Task:
+    async def execute_step(self, step: Step, page: Page | None = None):
+        pass
+
+    def get_task_for_replay(self) -> Task:
         self.data_manager.load()
-        tasks: List[Task] = self.data_manager.tasks
-        for i, task in enumerate(tasks):
+        task: Task
+        for i, task in enumerate(self.data_manager.tasks):
             logger.info(
-                f"Task-{i} is {task.objective} with {task.n_steps} steps and {task.n_actions} num_actions @ {task.timestamp or 'unknown'}"
+                f"Task-{i} is {task.objective} with {task.n_steps} steps & {task.n_actions} n_actions @ {task.timestamp}"
             )
 
-        task_select = _get_input("Select task: ")
         try:
-            task_select = int(task_select)
+            task_select = int(_get_input("Select task: "))
+            return self.data_manager.tasks[task_select]
         except ValueError:
             # so i can break into the debugger if i dont enter a number at this step
             breakpoint()
-
-        return tasks[task_select]
 
     async def use_action(self, action: NextAction):
         """

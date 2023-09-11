@@ -14,9 +14,17 @@ from clippy.crawler.tools_capture import _print_console
 from clippy.dm.data_manager import DataManager
 
 
+async def all_console_log(msg: ConsoleMessage):
+    print(f"msg", msg)
+    print(f"msg.args", msg.args)
+    # if msg.text.startswith("CATCH"):
+    #     return
+
+
 async def catch_console_injections(msg: ConsoleMessage, print_injection: bool = True) -> Action:
     if not msg.text.startswith("CATCH"):
         return
+    await all_console_log(msg)
 
     # if msg.text.startswith("CATCH"):
     values = []
@@ -26,7 +34,10 @@ async def catch_console_injections(msg: ConsoleMessage, print_injection: bool = 
     if print_injection:
         _print_console(*values, print_fn=logger.debug)
 
-    _, class_name, data = values  # data is list of [CATCH, class_name, *data]
+    if len(values) < 3:
+        return
+
+    catch_flag, class_name, data = values  # data is list of [CATCH, class_name, *data]
     data = json.loads(data)
 
     action = Actions[class_name](**data)
@@ -83,9 +94,16 @@ class CaptureAsync(Capture):
         self.captured_screenshot_ids.append(current_step.id)
 
         self.async_tasks["screenshot_event"].set()
+        logger.info(f"screenshot taken for {page.url[:50]}...")
 
     async def hook_console(self, msg: ConsoleMessage):
-        if action := await catch_console_injections(msg, print_injection=self.print_injection):
+        try:
+            action = await catch_console_injections(msg, print_injection=self.print_injection)
+        except Exception as e:
+            logger.error(f"Error catching msg: {msg}")
+            action = None
+
+        if action:
             self.task(action)
 
     async def hook_request_navigation_response(request: Request):
@@ -107,7 +125,7 @@ class CaptureAsync(Capture):
         # page.on("frameattached", log_hook("frameattached"))
         # page.on("requestfinished", log_hook("requestfinished"))
 
-    async def start(self, crawler: Crawler, start_page: str = None) -> Page:
+    async def start(self, crawler: Crawler, start_page: str | bool = False) -> Page:
         self.crawler = crawler
 
         logger.info("crawler start...")
@@ -117,7 +135,7 @@ class CaptureAsync(Capture):
         logger.info("setup page hooks...")
         self.setup_page_hooks(page=page)
 
-        if start_page:
+        if isinstance(start_page, str):
             # think this might fuck up the capture
             logger.info("going to start page")
             await page.goto(start_page)
@@ -211,10 +229,9 @@ class MachineCaptureAsync(MachineCapture):
 
         return actions_taken
 
-    async def execute_task(self, task: Task, no_confirm: bool = False, use_async_instructor: bool = True):
+    async def execute_task(self, task: Task, confirm: bool = True, use_async_instructor: bool = True) -> None:
         print("got all elements of interest, now scoring...")
 
-        self.setup_task(task=task, use_async=use_async_instructor)
         crawler = Crawler()
         page = await crawler.start(start_page=self.start_page, key_exit=False)
 
@@ -227,5 +244,5 @@ class MachineCaptureAsync(MachineCapture):
                 print("no actions in step...")
                 continue
 
-            await self.execute_step(step, page=crawler.page, confirm=(not no_confirm))
+            await self.execute_step(step, page=crawler.page, confirm=confirm)
         await crawler.end()

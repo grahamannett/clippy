@@ -173,7 +173,8 @@ class Task(ModelBase):
         Post-initialization method. Generates a unique ID for the step if not provided.
         """
         if self.id is None:
-            self.id = str(uuid.uuid5(UUID_NAMESPACE, self.objective))
+            # self.id = str(uuid.uuid5(UUID_NAMESPACE, self.objective))
+            self.id = str(uuid.uuid4())
 
     def __call__(self, action: Action, **kwargs) -> None:
         """

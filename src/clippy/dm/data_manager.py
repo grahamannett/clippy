@@ -1,10 +1,33 @@
 import json
 import os
 import shutil
+from asyncio import iscoroutine
 from pathlib import Path
 
-from clippy.states import Task
+from loguru import logger
+
 from clippy.dm.db_utils import Database
+from clippy.states import Task
+from clippy.utils._input import _get_input
+
+
+def confirm_override(func):
+    def wrapper(*args, **kwargs):
+        if kwargs.get("override", False):
+            logger.info("override set, skipping confirm")
+            return func(*args, **kwargs)
+
+        confirm_input = _get_input(f"confirm action for {func.__name__}. Press c/y to confirm or n to skip: ")
+
+        if confirm_input.lower() in ["n", "no"]:
+            logger.info(f"skipping... {func.__name__}")
+            return
+        elif confirm_input.lower() not in ["c", "y"]:
+            # allow breakpoint for debugger to inspect
+            breakpoint()
+        return func(*args, **kwargs)
+
+    return wrapper
 
 
 class DataManager:
@@ -12,30 +35,51 @@ class DataManager:
 
     _task: Task
     tasks: list[Task] = []
+
     db: Database
 
-    def __init__(self, task_data_dir: Path | str, database_path: Path | str = None):
-        if isinstance(task_data_dir, str):
-            task_data_dir = Path(task_data_dir)
-        if isinstance(database_path, str):
-            database_path = Path(database_path)
-
-        self.task_data_dir = task_data_dir
+    def __init__(self, task_data_dir: Path | str, database_path: Path | str | None = None):
+        self.task_data_dir: Path = Path(task_data_dir)
         self._clear_on_start = True
 
-        if database_path:
-            self.database_path = database_path
+        if database_path is not None:
+            self.database_path: Path = Path(database_path)
             self.db = Database(database_path)
 
+    """RUN COMMANDS:
+    --- TASKS FOLDER
+    - migrate: move all data to migrate folder
+
+    --- DB JSON
+    - drop_table: drops table from db
+    - drop_last: drops last from table from db
+    """
+
+    async def run(self, subcmd: str, **kwargs) -> None:
+        func = {
+            "migrate": self.migrate_data,
+            # db related
+            "drop_last": self.drop_last,
+            "drop_table": self.drop_table,
+        }.get(subcmd, None)
+
+        if func is None:
+            raise Exception(f"`{subcmd}` not supported in {self.__class__.__name__}")
+
+        if iscoroutine(output := func(**kwargs)):
+            await output
+
+        return output
+
     @property
-    def task(self):
+    def task(self) -> Task:
         return self.tasks[-1]
 
     @property
-    def curr_task_output(self):
+    def curr_task_output(self) -> str:
         return f"{self.task_data_dir}/current"
 
-    def capture_task(self, task: Task):
+    def capture_task(self, task: Task) -> None:
         self.tasks.append(task)
         self._task = task
 
@@ -51,15 +95,16 @@ class DataManager:
     def page_path(self, str):
         pass
 
-    def migrate_data(self, move_current: bool = False, override: bool = False):
+    def migrate_data(self, move_current: bool = False, override: bool = False, **kwargs) -> None:
         migration_dir = f"data/migrate"
         for folder in os.listdir(self.task_data_dir):
             # by default dont move current
             if "current" in folder and not move_current:
+                logger.info("skipping current folder...")
                 continue
 
             if os.path.exists(f"{migration_dir}/{folder}"):
-                print(f"overwrriting `{folder}` in `{migration_dir}` file")
+                logger.info(f"overwrriting `{folder}` in `{migration_dir}` file")
                 if not override:
                     confirm_override = input("press c/y: ")
                     if confirm_override.lower() not in ["c", "y"]:
@@ -67,6 +112,7 @@ class DataManager:
 
                 shutil.rmtree(f"{migration_dir}/{folder}")
 
+            logger.info(f"moving `{self.task_data_dir}/{folder}` to `{migration_dir}`")
             shutil.move(
                 f"{self.task_data_dir}/{folder}",
                 migration_dir,
@@ -100,16 +146,16 @@ class DataManager:
 
         return True
 
-    def dump_task(self, task: Task):
+    def dump_task(self, task: Task) -> None:
         task_file = f"{self.curr_task_output}/task.json"
         json_data = task.dump()
         with open(task_file, "w") as f:
             json.dump(json_data, f, indent=4)
 
-    def save(self, task: Task = None):
+    def save(self, task: Task | None = None) -> None:
         task = task or self.task
 
-        # dump task to current/task.json - this is the 
+        # dump task to current/task.json - this is the
         self.dump_task(task)
         folder = self.get_folder(task)
         shutil.copytree(self.curr_task_output, folder)
@@ -123,6 +169,16 @@ class DataManager:
         """
 
         return self.task_data_dir / task.id
+
+    @confirm_override
+    def drop_last(self, table: str, **kwargs) -> None:
+        doc_ids = [item.doc_id for item in self.db.table(table).all()]
+        dropped_element = self.db.table(table).remove(doc_ids=doc_ids)
+        logger.info(f"dropped doc: {dropped_element}")
+
+    @confirm_override
+    def drop_table(self, table: str, droplast: bool = False, **kwargs) -> None:
+        self.db.drop(table)
 
 
 class TaskRetriever:

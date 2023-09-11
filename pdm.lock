@@ -6,7 +6,7 @@ groups = ["default", "test", "dev"]
 cross_platform = true
 static_urls = false
 lock_version = "4.3"
-content_hash = "sha256:fb4dce45e18f57328cf2385532d6d4f10d366b1afe0812fab4bde6431ff42e36"
+content_hash = "sha256:28b257d4e2d84a9e876b837ef773bd09f21284864ca1a14a1a002f6e6ab933ff"
 
 [[package]]
 name = "aiohttp"
@@ -1731,6 +1731,13 @@ files = [
     {file = "tqdm-4.66.1-py3-none-any.whl", hash = "sha256:d302b3c5b53d47bce91fea46679d9c3c6508cf6332229aa1e7d8653723793386"},
     {file = "tqdm-4.66.1.tar.gz", hash = "sha256:d88e651f9db8d8551a62556d3cff9e3034274ca5d66e93197cf2490e2dcb69c7"},
 ]
+
+[[package]]
+name = "trajlab"
+version = "0.0.1"
+editable = true
+path = "./src/trajlab"
+summary = ""
 
 [[package]]
 name = "transformers"

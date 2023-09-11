@@ -27,6 +27,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
             data_dir=test_task_output_dir,
             key_exit=False,
         )
+        self.delay = 100
         return super().setUp()
 
     async def asyncTearDown(self):
@@ -104,7 +105,27 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
         # HERE we should find an element in the page
         action = await clippy.suggest_action()
         await clippy.use_action(action)
-        # await asyncio.sleep(1)
+
+    async def test_capture_actions(self) -> None:
+        clippy = self.clippy
+        clippy.start_page = "https://google.com"
+        clippy.headless = False
+        page = await clippy.start_capture()
+        await page.wait_for_load_state("domcontentloaded")
+        locator = page.get_by_label("Search", exact=True)
+        await locator.click()
+        await locator.type("hotel in Boise Idaho", delay=self.delay)
+        await page.keyboard.press("Enter", delay=self.delay)
+        await clippy.wait_until("screenshot_event")
+
+        # await page.type(text=
+
+        element = page.get_by_text(
+            "Top Hotels in Boise, ID - Cancel FREE on most hotelsHotels.comhttps://www.hotels"
+        ).nth(0)
+        element.scroll_into_view_if_needed(timeout=1000)
+        await element.click()
+        breakpoint()
 
     async def test_clippy_google_search(self):
         clippy = self.clippy
