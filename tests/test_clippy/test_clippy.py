@@ -111,6 +111,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
         clippy.start_page = "https://google.com"
         clippy.headless = False
         page = await clippy.start_capture()
+        # breakpoint()
         await page.wait_for_load_state("domcontentloaded")
         locator = page.get_by_label("Search", exact=True)
         await locator.click()
