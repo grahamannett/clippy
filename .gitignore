@@ -171,3 +171,6 @@ data/
 tests/fixtures/
 test_output/
 .vscode
+
+# ignore symlink
+src/trajlab/assets/data

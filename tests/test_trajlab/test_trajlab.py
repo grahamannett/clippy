@@ -13,3 +13,4 @@ def trajlab_app():
 def test_counter_app(trajlab_app: AppHarness):
     driver = trajlab_app.frontend()
     state_manager = trajlab_app.app_instance.state_manager
+    
