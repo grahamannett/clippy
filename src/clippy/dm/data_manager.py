@@ -46,6 +46,10 @@ class DataManager:
             self.database_path: Path = Path(database_path)
             self.db = Database(database_path)
 
+    @staticmethod
+    def create_task(**kwargs) -> Task:
+        return Task(**kwargs)
+
     """RUN COMMANDS:
     --- TASKS FOLDER
     - migrate: move all data to migrate folder
