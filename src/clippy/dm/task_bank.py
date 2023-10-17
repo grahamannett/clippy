@@ -7,7 +7,8 @@ from typing import Any
 
 from jinja2 import Environment
 
-task_bank_dir = "src/taskgen/wordbank"
+from clippy.constants import TASK_BANK_DIR
+
 task_base_format = "_base"
 word_bank_format = "_bank"
 
@@ -47,7 +48,7 @@ class WordBank(UserDict):
 
 
 class TaskBankManager:
-    def __init__(self, task_bank_dir: str = task_bank_dir, seed: int | None = None) -> None:
+    def __init__(self, task_bank_dir: str = TASK_BANK_DIR, seed: int | None = None) -> None:
         self.task_bank_dir = task_bank_dir
         self.tasks = []
         self._seed = seed

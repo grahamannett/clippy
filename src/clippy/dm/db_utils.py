@@ -42,6 +42,9 @@ class Database(tinydb.TinyDB):
         instance.doc_id = table.insert(asdict(instance))
         return instance.doc_id
 
+    def load_all(self):
+        pass
+
     @classmethod
     def database_api_calls(cls, func: Callable):
         @wraps(func)

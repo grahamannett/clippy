@@ -6,5 +6,5 @@ import reflex as rx
 
 
 # class Task(Task, rx.Model, table=True):
-class Task(rx.Model, table=True):
+class TrackedTask(rx.Model, table=True):
     name: str

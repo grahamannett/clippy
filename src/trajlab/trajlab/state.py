@@ -6,6 +6,9 @@ from typing import Dict, List
 import reflex as rx
 from loguru import logger
 
+# from tinydb import TinyDb
+from clippy.dm.db_utils import Database as Database
+from clippy.run import Clippy
 from trajlab.constants import len_long, len_short, tasks_dir, image_type, image_assets
 
 # tasks = [{"name": f.name, "short_name": f.name[:8]} for f in Path(tasks_dir).iterdir() if f.is_dir()]
@@ -15,13 +18,37 @@ class State(rx.State):
     """base state."""
 
     tasks: List[List[str]]
+    _db: Database = None
+
+    def load_tasks(self) -> None:
+        self.tasks = [[f.name, f.name[:len_short]] for f in Path(tasks_dir).iterdir() if f.is_dir()]
+        MenuState.show_task_extra = False
+        logger.info(f"loaded {len(self.tasks)} tasks")
+
+
+class DatabaseInterface(State):
+    """
+    since DB eventually will move to SQL thing and not TinyDB, this is just so I can keep a database in
+    """
+
+    _db: Database = None
 
     @rx.var
-    def get_tasks(self) -> List[List[str]]:
-        MenuState.show_task_extra = False
-        self.tasks = [[f.name, f.name[:len_short]] for f in Path(tasks_dir).iterdir() if f.is_dir()]
-        logger.info(f"loaded {len(self.tasks)} tasks")
-        return self.tasks
+    def do_this(self):
+        logger.info("doing this")
+
+    def check_db(self) -> None:
+        logger.info(f"checking db... with current task {TaskState.task_id}")
+        database_path = "../../data/db/db.json"
+
+        db = Database(database_path)
+        breakpoint()
+
+    def approve_task(self, task_id: str) -> None:
+        logger.info(f"approving task {task_id}")
+        self._db.approve_task(task_id)
+        self.load_tasks()
+        return rx.redirect("/")
 
 
 class MenuState(State):
@@ -36,7 +63,7 @@ class MenuState(State):
         self.show_right = False
 
 
-class Step(State):
+class StepState(State):
     step_id: str = None
     url: str = None
     image_path: str = None
@@ -49,11 +76,6 @@ class Step(State):
         short_url = step["url"][:len_long] + "..." if len(step["url"]) > len_long else step["url"]
         short_id = step["id"][:len_long] + "..." if len(step["id"]) > len_long else step["id"]
         image_path = f"{image_assets}/{task_id}/{step['id']}.{image_type}"
-        # abs_image_path = (Path(tasks_dir) / task_id / step["id"]).with_suffix(f".{image_type}")
-        # sym_image_path = Path(f"trajlab/{image_assets}/{str(abs_image_path.name)}").resolve()
-
-        # if not sym_image_path.exists():
-        #     os.symlink(str(abs_image_path.resolve()), sym_image_path)
 
         inst = cls(
             step_id=step["id"],
@@ -65,17 +87,21 @@ class Step(State):
         return inst
 
 
-class Task(State):
+class TaskState(State):
     task_id: str = None
     task_id_short: str = None
     objective: str = None
     timestamp: str = None
     _steps: List[Dict[str, str]] = []
+    _clippy = None
+
+    full_path: str = None
     # steps: List[Step] = None
 
     def load_task(self, task_id: str):
         logger.info(f"loading task {task_id}...")
         task_filepath = Path(tasks_dir) / task_id / "task.json"
+        self.full_path = str(task_filepath.resolve())
         with open(task_filepath) as f:
             data = json.load(f)
         self.task_id = data["id"]
@@ -109,8 +135,22 @@ class Task(State):
         return len(self._steps)
 
     @rx.var
-    def steps(self) -> List[Step]:
+    def steps(self) -> List[StepState]:
         logger.info(f"parsing {len(self._steps)} steps for task {self.task_id}")
         if self._steps != []:
-            return [Step.parse_step(s, task_id=self.task_id) for s in self._steps]
+            return [StepState.parse_step(s, task_id=self.task_id) for s in self._steps]
         return []
+
+    def new_random_task(self) -> None:
+        self._clippy = Clippy()
+        task = self._clippy._get_random_task()
+
+    def launch_from_state(self, step_id: str):
+        logger.info(f"should launch from this state {step_id}")
+        # from clippy.run import check_startup, get_args, Clippy, ClippyState
+
+        # check_startup()
+
+        # args = get_args()
+        # kwargs = vars(args)
+        # clippy = Clippy(**kwargs)

@@ -52,9 +52,9 @@ class Clippy:
         confirm: bool = False,
         pause_start: bool = True,
         clear_step_states: bool = False,
-        data_dir: str = "data/",
-        data_manager_path: str = "data/tasks",
-        database_path: str = "data/db/db.json",
+        data_dir: str = f"{constants.ROOT_DIR}/data/",
+        data_manager_path: str = f"{constants.ROOT_DIR}/data/tasks",
+        database_path: str = f"{constants.ROOT_DIR}/data/db/db.json",
         seed: int | None = None,
         **kwargs,
     ) -> None:
@@ -112,6 +112,10 @@ class Clippy:
         match cmd:
             case "capture":
                 self._check_objective(kwargs)
+
+    def _get_random_task(self) -> str:
+        task = self.tbm.sample()
+        return task
 
     def _check_objective(self, kwargs: dict) -> None:
         # if we set task in kwargs then fetch it from task bank
