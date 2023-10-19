@@ -16,6 +16,8 @@ class DC(Protocol):
 class Database(tinydb.TinyDB):
     _instance = None
     MemoryStorage = tinydb.storages.MemoryStorage
+    Query = tinydb.Query
+    Table = tinydb.database.Table
 
     # database config for when to save data
     _save_api_calls: bool = True
