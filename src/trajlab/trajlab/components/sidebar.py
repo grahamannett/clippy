@@ -1,11 +1,13 @@
+from typing import List
+
 import reflex as rx
 
-from trajlab.state import MenuState, State, TaskState, ApprovalStatus
 from trajlab.components.common import task_button
+from trajlab.state import MenuState, State
 
 
 # def sidebar(children: bool = False) -> rx.Component:
-def sidebar(*children) -> rx.Component:
+def sidebar(*children: List[rx.Component]) -> rx.Component:
     return rx.box(
         rx.button("sidebar", on_click=MenuState.right),
         rx.drawer(

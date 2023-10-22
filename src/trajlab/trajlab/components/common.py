@@ -4,14 +4,17 @@ from trajlab.state import State, TaskState, TaskValuesDict
 
 
 def task_button_datetime(time_str: str) -> rx.Component:
+    """Creates a button with the task's datetime."""
     return rx.container(rx.spacer(), rx.text(f"[{time_str}]"))
 
 
 def task_button_approval_status(approval_status: str) -> rx.Component:
+    """Creates a button with the task's approval status."""
     return rx.container(rx.text(f"{approval_status}"))
 
 
 def task_button(task_values: TaskValuesDict) -> rx.Component:
+    """Creates a button for a task with optional datetime and approval status."""
     return rx.box(
         rx.button(
             rx.text(task_values["short_id"]),
@@ -51,6 +54,7 @@ def container(*children, **props):
 
 
 def header_rows(name: str, value: str, **kwargs) -> rx.Component:
+    """Creates a row with a name and a value."""
     return rx.hstack(
         rx.text(name),
         rx.spacer(),
