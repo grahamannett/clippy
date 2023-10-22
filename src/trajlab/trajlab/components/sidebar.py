@@ -1,15 +1,11 @@
-from typing import List
-
 import reflex as rx
 
-from trajlab.state import DatabaseInterface, MenuState, State, TaskState
+from trajlab.state import MenuState, State, TaskState, ApprovalStatus
+from trajlab.components.common import task_button
 
 
-def task_button(task_name: List) -> rx.Component:
-    return rx.box(rx.button(task_name[1], on_click=lambda: TaskState.goto_task(task_name[0])))
-
-
-def sidebar(show_task_sidebar: bool = False) -> rx.Component:
+# def sidebar(children: bool = False) -> rx.Component:
+def sidebar(*children) -> rx.Component:
     return rx.box(
         rx.button("sidebar", on_click=MenuState.right),
         rx.drawer(
@@ -19,7 +15,8 @@ def sidebar(show_task_sidebar: bool = False) -> rx.Component:
                     rx.drawer_body(
                         rx.accordion(
                             # show options for viewing task info
-                            rx.cond(show_task_sidebar, rx.text("extra task info"), None),
+                            # rx.cond(show_task_sidebar, sidebar_extra_task_info(), None),
+                            rx.cond(len(children) > 0, rx.container(*children), None),
                             # show list of tasks
                             rx.accordion_item(
                                 rx.accordion_button(
@@ -35,7 +32,6 @@ def sidebar(show_task_sidebar: bool = False) -> rx.Component:
                         ),
                     ),
                     rx.drawer_footer(
-                        # rx.button(rx.breadcrumb(rx.breadcrumb_item(rx.breadcrumb_link("Home", href="/")))),
                         rx.link(
                             rx.button("Home"),
                             href="/",
@@ -43,10 +39,9 @@ def sidebar(show_task_sidebar: bool = False) -> rx.Component:
                             button=True,
                             on_click=MenuState.close_drawer,
                         ),
-                        # rx.breadcrumb(rx.breadcrumb_item(rx.breadcrumb_link("Home", href="/"))),
                         # on_click=MenuState.close_drawer,
                         rx.spacer(),
-                        rx.button("DB", on_click=DatabaseInterface.check_db),
+                        rx.button("🔄 DB File", on_click=State.reload_database),
                         rx.spacer(),
                         rx.button("Close", on_click=MenuState.right),
                     ),
@@ -55,5 +50,6 @@ def sidebar(show_task_sidebar: bool = False) -> rx.Component:
             ),
             on_esc=MenuState.close_drawer,
             is_open=MenuState.show_right,
+            size="sm",
         ),
     )

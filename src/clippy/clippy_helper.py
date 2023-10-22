@@ -172,7 +172,6 @@ class Clippy:
 
     async def run_capture(self, **kwargs):
         await self.start_capture()
-        # breakpoint()
         # if we capture we dont want to close browser so we will await on pause_start
         await self.async_tasks["crawler_pause"]
         await self.end_capture()
