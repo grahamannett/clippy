@@ -24,11 +24,6 @@ class Words(UserList):
         super().__init__(words)
         self.word_var = word_var
 
-    def sample(self, seed: int | None = None) -> Any:
-        if seed != None:
-            return self[seed % len(self)]
-        return random.choice(self)
-
     @classmethod
     def from_file(cls, file: str | Path):
         if isinstance(file, str):
@@ -36,6 +31,11 @@ class Words(UserList):
 
         word_var = file.name.split(word_bank_format)[0]
         return cls(_process_word_bank(file), word_var=word_var)
+
+    def sample(self, seed: int | None = None) -> Any:
+        if seed != None:
+            return self[seed % len(self)]
+        return random.choice(self)
 
 
 class WordBank(UserDict):

@@ -7,6 +7,7 @@ from loguru import logger
 from playwright.async_api import Locator, Page
 
 from clippy.controllers.apis.cohere_controller import CohereController, Responses
+from clippy.controllers.apis.cohere_controller_utils import Generation, Generations
 from clippy.crawler.parser.dom_snapshot import get_action_type
 from clippy.states import NextAction
 from clippy.stubs.stubs import StubTemplates
@@ -22,6 +23,12 @@ class Instructor:
         self.use_llm = use_llm
 
         self.lm_controller = CohereController()
+
+    async def end(self):
+        try:
+            await self.lm_controller.end()
+        except:
+            pass
 
     async def score_actions(
         self,
@@ -118,7 +125,7 @@ class Instructor:
             )
             logger.info("making filter request...")
 
-            response = await self.lm_controller.generate(
+            response: Generations = await self.lm_controller.generate(
                 prompt=prompt,
                 max_tokens=max_tokens,
                 num_generations=num_generations,
@@ -128,6 +135,8 @@ class Instructor:
 
             logger.info("done filter request...")
 
+            if len(response.generations) > 1:
+                raise ValueError("response has more than one generation")
             # try to remove the left space and empty lines
             filtered_elements = [f.lstrip(" ") for f in response[0].text.split("\n") if f != ""]
 

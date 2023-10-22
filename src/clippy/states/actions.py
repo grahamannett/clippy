@@ -21,6 +21,17 @@ class NextAction:
     # needed if we score all actions
     score: float = None
 
+    def __eq__(self, __value: object) -> bool:
+        return self.action == __value
+
+    def is_scroll(self) -> bool:
+        """Check if the action is 'scrolldown'."""
+        return (self.action == "scrolldown") or (self.action == "scrollup")
+
+    def is_done(self) -> bool:
+        """Check if the action is 'done'."""
+        return self.action == "done"
+
 
 @dataclass
 class ActionMetadata:

@@ -1,16 +1,12 @@
-from dataclasses import dataclass, asdict, is_dataclass
 from os import environ
-from typing import Any, Coroutine, Dict, List, Type
+from typing import Coroutine, Dict, List, Type
 
 import cohere
 
-
+from clippy.controllers.apis.cohere_controller_utils import Embeddings, Generations
 from clippy.controllers.controller import Controller
 from clippy.controllers.utils import allow_full_response
-from clippy.dm.db_utils import Database
-
-from clippy.controllers.apis.cohere_controller_utils import Generations, Embeddings
-from functools import wraps
+from clippy.dm import Database
 
 AVAILABLE_MODELS = ["command-xlarge", "xlarge"]
 DEFAULT_SPECIAL_TOKENS = {13782: ["click"], 5317: ["type"]}
@@ -30,15 +26,15 @@ class CohereController(Controller):
     A class to interact with the Cohere API.
     """
 
-    client: cohere.AsyncClient
-    client_exception: Type[cohere.error.CohereError] = cohere.error.CohereError
-    client_exception_message: str = "Cohere fucked up: {0}"
-
     # cohere config
     class config:
         truncate: str = "END"  # one of NONE|START|END
         model: str = "command"
         embed_model: str = "embed-english-v2.0"
+
+    client: cohere.AsyncClient
+    client_exception: Type[cohere.error.CohereError] = cohere.error.CohereError
+    client_exception_message: str = "Cohere fucked up: {0}"
 
     _is_async: bool = True
 

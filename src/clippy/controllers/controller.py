@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Protocol
 
 from concurrent.futures import ThreadPoolExecutor
 
@@ -19,6 +19,14 @@ def _full_response(data: Any, obj: Any):
     return raw
 
 
+class ClientProtocol(Protocol):
+    async def embed(self, texts: List[str], *args, **kwargs):
+        ...
+
+    async def generate(self, prompt: str, *args, **kwargs):
+        ...
+
+
 class Controller:
     class Clients:
         pass
@@ -31,6 +39,7 @@ class Controller:
     _return_full: bool = False
 
     # ---
+    client: ClientProtocol
     client_exception: Exception = None
     client_exception_message: str = None
 
@@ -39,6 +48,9 @@ class Controller:
 
     def __getattr__(self, name: str):
         return getattr(self.client, name)
+
+    async def end(self):
+        return await self.client.close()
 
     def _check(self):
         if self.config.model is None:
@@ -54,35 +66,33 @@ class Controller:
         raise NotImplementedError
 
     async def score_options(self, options: List[str], **kwargs):
-        scores = await asyncio.gather(
-            *[self.generate(prompt=opt, max_tokens=0, return_likelihoods="ALL") for opt in options]
-        )
+        tasks = [self.generate(prompt=opt, max_tokens=0, return_likelihoods="ALL") for opt in options]
+        scores = await asyncio.gather(*tasks)
         return scores
 
     async def score_text(self, text: str) -> float:
-        resp = await self.generate(prompt=text, max_tokens=0, return_likelihoods="ALL")
-        return resp[0].likelihood
+        response = await self.generate(prompt=text, max_tokens=0, return_likelihoods="ALL")
+        return response[0].likelihood
 
     async def find_most_similar_str(
-        self, objective: str, objectives: List[str] | List[Task], return_all: bool = False
-    ) -> Tuple[float, str, Optional[np.ndarray]]:
-        # get all the objectives
-        if isinstance(objectives[0], Task):
-            objectives = [t.objective for t in objectives if t.objective != objective]
+        self, objective: str, objectives: List[str] | List[Task]
+    ) -> Tuple[float, str, np.ndarray]:
+        # Check if objectives are instances of Task and filter out the current objective
+        objectives = [t.objective for t in objectives if isinstance(t, Task) and t.objective != objective]
 
-        objectives = [objective] + objectives
+        # Add the current objective to the start of the list
+        objectives.insert(0, objective)
 
-        # embed them but stack so one call
+        # Embed all objectives in a single call
         embedding_resp = await self.embed(objectives)
         embeddings = embedding_resp.embeddings
 
-        # get the most similar
+        # Calculate cosine similarity scores
         scores = cosine_similarity([embeddings[0]], embeddings[1:]).flatten()
-        argmax = np.argmax(scores)
 
-        out = scores[argmax], objectives[argmax + 1]
+        # Find the most similar objective
+        most_similar_index = np.argmax(scores)
+        most_similar_score, most_similar_objective = scores[most_similar_index], objectives[most_similar_index + 1]
 
-        if return_all:
-            out += (scores,)
-
-        return out
+        # Return the most similar objective and its score, along with all scores if requested
+        return (most_similar_score, most_similar_objective, scores)

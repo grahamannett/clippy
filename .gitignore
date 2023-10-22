@@ -169,7 +169,7 @@ envrc
 ignore/
 data/
 tests/fixtures/
-test_output/
+output/test_output/
 .vscode
 
 # ignore symlink

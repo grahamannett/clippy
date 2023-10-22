@@ -5,12 +5,10 @@ from collections import UserDict, UserList
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from cohere.error import CohereError
 from cohere import responses
+from cohere.error import CohereError
 
 from clippy.controllers.utils import truncate_left
-
-# class CohereObject
 
 
 @dataclass
@@ -70,6 +68,9 @@ class Generations:
             meta=resp.meta,
             return_likelihoods=resp.return_likelihoods,
         )
+
+    def __getitem__(self, idx: int) -> Generation:
+        return self.generations[idx]
 
 
 class CohereJSONEncoder(json.JSONEncoder):

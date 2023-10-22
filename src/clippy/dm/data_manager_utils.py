@@ -1,5 +1,5 @@
 from loguru import logger
-from clippy.utils._input import _get_input
+from clippy.utils.input_utils import _get_input
 
 
 

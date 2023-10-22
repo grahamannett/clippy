@@ -1,6 +1,5 @@
 import asyncio
 from argparse import Namespace
-from distutils.util import strtobool
 from os import environ
 from pathlib import Path
 from typing import Dict, List
@@ -9,28 +8,11 @@ from loguru import logger
 
 from clippy import constants
 from clippy.capture import CaptureAsync, MachineCaptureAsync
-from clippy.crawler.crawler import Crawler, Page
-from clippy.crawler.parser.dom_snapshot import DOMSnapshotParser, Locators
-from clippy.dm.data_manager import DataManager
-from clippy.dm.task_bank import TaskBankManager
+from clippy.crawler import Crawler, DOMSnapshotParser, Locators, Page
+from clippy.dm import DataManager, TaskBankManager
 from clippy.instructor import Instructor, NextAction
-from clippy.states import Action, Task
-from clippy.states.states import Step
-from clippy.utils._input import _get_input
-
-
-def _device_ratio_check():
-    return bool(strtobool(environ.get("KEEP_DEVICE_RATIO", "False")))
-
-
-def _check_exec_type(exec_type: str, task: str):
-    if (task == "capture") and (exec_type != "async"):
-        print("==>WARNING<==")
-        print("---you cannot capture task in sync mode due to needing to handle callbacks")
-        print("---manually changing exec_type to async")
-        print("==>WARNING END<==")
-        exec_type = "async"
-    return exec_type
+from clippy.states import Action, Step, Task
+from clippy.utils import _device_ratio_check, _get_input, _get_environ_var
 
 
 class Clippy:
@@ -63,7 +45,9 @@ class Clippy:
         self.key_exit = key_exit
         self.confirm = confirm
         self.pause_start = pause_start
+
         self.keep_device_ratio = _device_ratio_check()
+        self.DEBUG = _get_environ_var("DEBUG", "False")
 
         self.start_page = start_page
         self.objective = objective
@@ -76,8 +60,6 @@ class Clippy:
 
         self.tbm = TaskBankManager(seed=seed)
         self.tbm.process_task_bank()
-
-        self.DEBUG = strtobool(environ.get("DEBUG", "False"))
 
     @property
     def page(self) -> Page | None:
@@ -246,6 +228,18 @@ class Clippy:
 
         return elements
 
+    suffix_element_map = {
+        "link": "page",
+    }
+
+    def suffix_element(self, element: str) -> str:
+        try:
+            # split off the first word and add a suffix if it exists
+            _suffix = self.suffix_element_map.get(element.split(" ", 1)[0], "")
+            return f"{element} {_suffix}"
+        except:
+            return element
+
     async def suggest_action(
         self, num_elems: int = 100, previous_commands: List[str] = [], filter_elements: bool = True
     ) -> NextAction:
@@ -257,8 +251,11 @@ class Clippy:
 
         # get all the links/actions -- TODO: should these be on the instructor?
         # filter out text/images that are not actionable
-        elements = await self.get_elements(filter_elements=True)
+        all_elements = await self.get_elements(filter_elements=True)
 
+        elements = [self.suffix_element(el) for el in all_elements]
+
+        # filter to only the first num_elems
         if num_elems:
             elements = elements[:num_elems]
 
@@ -287,13 +284,15 @@ class Clippy:
             temperature=0.0,
         )
         # just get the first response unless we change num_generations
-        generated_response = generated_response[0]
+        raw_action = generated_response[0]
 
         # transform the generated action to a json type action to a NextAction type
-        logger.info(f"transforming response...{generated_response.text}")
-        next_action = await instructor.transform_action(generated_response.text, temperature=0.3)
-        next_action.locator = self._get_locator_for_action(next_action)
-        logger.info(f"transformed {generated_response.text} to {next_action}")
+        logger.info(f"transforming response...{raw_action.text}")
+        next_action = await instructor.transform_action(raw_action.text, temperature=0.2)
+        if not (next_action.is_scroll() or next_action.is_done()):
+            next_action.locator = self._get_locator_for_action(next_action)
+        logger.info(f"transformed {raw_action.text} to {next_action}")
+        await instructor.end()
         return next_action
 
     def _get_locator_for_action(self, action: NextAction):
