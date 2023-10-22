@@ -1,7 +1,7 @@
 import asyncio
 import json
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 from loguru import logger
 from playwright.async_api import Locator, Page
@@ -15,6 +15,11 @@ from clippy.stubs.stubs import StubTemplates
 action_options = [{"next_command": "click"}, {"next_command": "type"}]
 
 
+def match_generated_output(text: str, elements: List[str]) -> Optional[int]:
+    """Given a generated text, match it to an element on the page."""
+    return next((i for i, el in enumerate(elements) if el in text), None)
+
+
 class Instructor:
     """the instructor is the LLM that is used to score page elements and guess next action"""
 
@@ -24,10 +29,17 @@ class Instructor:
 
         self.lm_controller = CohereController()
 
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        await self.end()
+
     async def end(self):
+        """Ends the language model controller, ignoring any exceptions."""
         try:
             await self.lm_controller.end()
-        except:
+        except Exception:
             pass
 
     async def score_actions(
@@ -38,12 +50,18 @@ class Instructor:
         previous_commands: List[str] = None,
         locators: List[Locator] = [],
     ) -> List[NextAction]:
-        """given the page state, compare all page elements against the objective
-        Args:
-            objective (str): current objective
-        """
+        """Scores all page elements against the current objective.
 
-        # state could be combined into prompt.render but seperate to allow examing state
+        Args:
+            objective (str): Current objective.
+            elements (List[str]): Page elements to score.
+            url (str): Current URL.
+            previous_commands (List[str], optional): Previous commands. Defaults to None.
+            locators (List[Locator], optional): Locators for the elements. Defaults to [].
+
+        Returns:
+            List[NextAction]: List of scored actions.
+        """
         state = StubTemplates.state.render(
             objective=objective,
             url=url,
@@ -51,17 +69,17 @@ class Instructor:
             previous_commands=previous_commands,
         )
 
-        async def score_fn(el, idx):
-            action_type = get_action_type(el)
-            next_command = f"{action_type} - {el}"
+        async def score_element(element: str, index: int) -> NextAction:
+            action_type = get_action_type(element)
+            next_command = f"{action_type} - {element}"
             prompt = StubTemplates.prompt.render(state=state, next_command=next_command)
             score = await self.lm_controller.generate(prompt=prompt, max_tokens=0, return_likelihoods="ALL")
-            action = NextAction(action=action_type, score=score[0].likelihood, action_args=el)
+            action = NextAction(action=action_type, score=score[0].likelihood, action_args=element)
             if locators:
-                action.locator = locators[idx]
+                action.locator = locators[index]
             return action
 
-        return await asyncio.gather(*[score_fn(el, idx) for idx, el in enumerate(elements)])
+        return await asyncio.gather(*[score_element(element, index) for index, element in enumerate(elements)])
 
     async def generate_next_action(
         self,
@@ -75,7 +93,7 @@ class Instructor:
         return_likelihoods: str = "GENERATION",
         temperature: float = 0.25,
     ) -> Responses.Generations:
-        """given the page state, generate the next action, this is more ideal than scoring all actions"""
+        """Given the page state, generate the next action. This is more ideal than scoring all actions."""
         prompt = StubTemplates.prompt.render(
             objective=objective,
             title=title,
@@ -84,14 +102,13 @@ class Instructor:
             previous_commands=previous_commands,
         )
 
-        response = await self.lm_controller.generate(
+        return await self.lm_controller.generate(
             prompt=prompt,
             max_tokens=max_tokens,
             num_generations=num_generations,
             return_likelihoods=return_likelihoods,
             temperature=temperature,
         )
-        return response
 
     async def filter_actions(
         self,
@@ -109,10 +126,11 @@ class Instructor:
     ):
         filtered_elements = elements
 
-        while max_tries > 0 and len(filtered_elements) > max_elements:
-            max_tries -= 1
+        for _ in range(max_tries):
+            if len(filtered_elements) <= max_elements:
+                break
 
-            prompt = StubTemplates.prompt.render(
+            prompt: str = StubTemplates.prompt.render(
                 header_prompt=StubTemplates.header_filter_elements.render(max_elements=max_elements),
                 objective=objective,
                 title=title,
@@ -138,7 +156,7 @@ class Instructor:
             if len(response.generations) > 1:
                 raise ValueError("response has more than one generation")
             # try to remove the left space and empty lines
-            filtered_elements = [f.lstrip(" ") for f in response[0].text.split("\n") if f != ""]
+            filtered_elements = [f.lstrip() for f in response[0].text.split("\n") if f]
 
         # we should probably match with original elements at this point
         return filtered_elements
@@ -150,10 +168,9 @@ class Instructor:
         temperature: float = 0.25,
         **kwargs,
     ) -> NextAction:
-        """given a generated action str, transform it into a valid action
-        meaning it has an action type, an id/locator, and a value if needed
+        """Transforms a generated action string into a valid action.
+        A valid action has an action type, an id/locator, and a value if needed.
         """
-        next_action = None
         prompt = StubTemplates.transform_generation.render(generated_action=generated_action)
         response = await self.lm_controller.generate(
             prompt=prompt,
@@ -164,11 +181,10 @@ class Instructor:
             **kwargs,
         )
 
-        # give multiple tries to get a valid response
+        # Attempt to get a valid response
         for resp in response:
             try:
-                # should be similar to:
-                # {"action": "type", "element_id": 9, "element_metadata": null, "action_args": "buy bodywash"}
+                # Expected format: {"action": "type", "element_id": 9, "element_metadata": null, "action_args": "buy bodywash"}
                 resp_dict = json.loads(resp.text)
 
                 next_action = NextAction(
@@ -176,44 +192,30 @@ class Instructor:
                     element_id=resp_dict.pop("element_id"),
                     element_metadata=resp_dict.pop("element_metadata", None),
                     action_args=resp_dict.pop("action_args", None),
-                    # score is the least needed
                     score=resp.likelihood,
                 )
 
-                if len(resp_dict) > 0:
-                    logger.warning("resp has more keys than we expected")
-                    # not a field
+                if resp_dict:
+                    logger.warning("Response has more keys than expected")
                     next_action.extra = resp_dict
 
-                # attach the response to the action
                 next_action.response = resp
                 return next_action
-            except json.decoder.JSONDecodeError or KeyError:
-                logger.error(f"resp isn't json decodable: {resp[0].text}")
-                continue
-            except KeyError:
-                logger.error(f"resp isn't doesnt have Keys we need: {resp_dict}")
+            except (json.decoder.JSONDecodeError, KeyError) as e:
+                logger.error(f"Error processing response: {e}")
                 continue
 
+        if next_action is None:
+            raise ValueError("Unable to transform generated action into a valid action")
         return next_action
 
-    async def match_generated_output(self, text: str, elements: List[str]) -> int:
-        """given a generated text, match it to an element on the page"""
-
-        for i, el in enumerate(elements):
-            if el in text:
-                return i
-
-        return None
-
     async def _find_action_from_elems(self, elems: List[str], locators: List[str]):
-        next_action = await self.score_actions(
+        scored = await self.score_actions(
             elems,
             self.objective,
             url=self.crawler.page.url,
             locators=locators,
         )
-        scored = await self.score_actions(elems, self.objective, url=self.crawler.page.url)
         # top action
         logger.info(f"top action: {scored[0]}")
         for i, score in enumerate(scored):

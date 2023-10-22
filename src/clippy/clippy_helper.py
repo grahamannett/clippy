@@ -243,56 +243,59 @@ class Clippy:
     async def suggest_action(
         self, num_elems: int = 100, previous_commands: List[str] = [], filter_elements: bool = True
     ) -> NextAction:
-        instructor = Instructor(use_async=True)
-        self.dom_parser = DOMSnapshotParser(self.crawler)  # need cdp_client and page so makes sense to use crawler
-        title = await self.crawler.title
+        async with Instructor() as instructor:
+            # instructor = Instructor(use_async=True)
+            self.dom_parser = DOMSnapshotParser(self.crawler)  # need cdp_client and page so makes sense to use crawler
+            title = await self.crawler.title
 
-        previous_commands = self._get_previous_commands(previous_commands)
+            previous_commands = self._get_previous_commands(previous_commands)
 
-        # get all the links/actions -- TODO: should these be on the instructor?
-        # filter out text/images that are not actionable
-        all_elements = await self.get_elements(filter_elements=True)
+            # get all the links/actions -- TODO: should these be on the instructor?
+            # filter out text/images that are not actionable
+            all_elements = await self.get_elements(filter_elements=True)
 
-        elements = [self.suffix_element(el) for el in all_elements]
+            elements = [self.suffix_element(el) for el in all_elements]
 
-        # filter to only the first num_elems
-        if num_elems:
-            elements = elements[:num_elems]
+            # filter to only the first num_elems
+            if num_elems:
+                elements = elements[:num_elems]
 
-        if filter_elements:
-            logger.info(f"for `{title[:20]}` filtering {len(elements)} elements...")
-            filtered_elements = await instructor.filter_actions(
+            # filter with the language model to get the most likely actions, not using likelihoods
+            if filter_elements:
+                logger.info(f"for `{title[:20]}` filtering {len(elements)} elements...")
+                filtered_elements = await instructor.filter_actions(
+                    elements,
+                    self.objective,
+                    title,
+                    self.crawler.url,
+                    previous_commands=previous_commands,
+                    max_elements=10,
+                    temperature=0.0,
+                )
+
+                elements = filtered_elements
+
+            logger.info(f"generating response with {len(elements)} elements...")
+            generated_response = await instructor.generate_next_action(
                 elements,
                 self.objective,
                 title,
                 self.crawler.url,
                 previous_commands=previous_commands,
-                max_elements=10,
+                num_generations=1,
                 temperature=0.0,
             )
+            # just get the first response unless we change num_generations
+            raw_action = generated_response[0]
 
-            elements = filtered_elements
+            # transform the generated action to a json type action to a NextAction type
+            logger.info(f"transforming response...{raw_action.text}")
+            next_action = await instructor.transform_action(raw_action.text, temperature=0.2)
+            if not (next_action.is_scroll() or next_action.is_done()):
+                next_action.locator = self._get_locator_for_action(next_action)
 
-        logger.info(f"generating response with {len(elements)} elements...")
-        generated_response = await instructor.generate_next_action(
-            elements,
-            self.objective,
-            title,
-            self.crawler.url,
-            previous_commands=previous_commands,
-            num_generations=1,
-            temperature=0.0,
-        )
-        # just get the first response unless we change num_generations
-        raw_action = generated_response[0]
-
-        # transform the generated action to a json type action to a NextAction type
-        logger.info(f"transforming response...{raw_action.text}")
-        next_action = await instructor.transform_action(raw_action.text, temperature=0.2)
-        if not (next_action.is_scroll() or next_action.is_done()):
-            next_action.locator = self._get_locator_for_action(next_action)
-        logger.info(f"transformed {raw_action.text} to {next_action}")
-        await instructor.end()
+            logger.info(f"transformed {raw_action.text} to {next_action}")
+        # await instructor.end()
         return next_action
 
     def _get_locator_for_action(self, action: NextAction):
