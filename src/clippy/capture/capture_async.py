@@ -104,7 +104,7 @@ class CaptureAsync(Capture):
             action = None
 
         if action:
-            self.task(action)
+            await self.task(action)
 
     async def hook_request_navigation_response(request: Request):
         if request.is_navigation_request():
@@ -141,6 +141,9 @@ class CaptureAsync(Capture):
             await page.goto(start_page)
 
         return page
+
+    async def end(self):
+        pass
 
 
 class HumanCaptureAsync(CaptureAsync):

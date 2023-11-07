@@ -23,7 +23,7 @@ class Capture:
         use_llm: bool = False,
         print_injection: bool = True,
         use_screenshot_matcher: bool = True,
-        clippy: Clippy = None,
+        clippy: "Clippy" = None,
     ) -> None:
         self.start_page = start_page
 
@@ -44,6 +44,9 @@ class Capture:
     def _input(self, text: str) -> str:
         # used for mocking input
         return input(text)
+
+    async def end(self):
+        pass
 
     def confirm_input(self, next_type: Action | Step, confirm: bool = True, **kwargs) -> None:
         if not confirm:
@@ -92,24 +95,3 @@ class MachineCapture(Capture):
 
     def execute_press(self, action: Action, page: Page, **kwargs) -> Awaitable[None] | None:
         return page.keyboard.press(action.value, delay=self.input_delay)
-
-    def execute_click_with_screenshot(
-        self, action: Actions.Click, page: Page, is_last_action: bool = False, **kwargs
-    ) -> Coroutine[Any, Any, None]:
-        if not is_last_action:
-            return page.mouse.click(action.x, action.y)
-
-        ss_path = self.ss_match.get_latest_screenshot_path(
-            data_dir=self.data_manager.data_dir_task, task_id=self.task.id, step_id=self.data_manager.task.id
-        )
-        action_template_out_file = self.ss_match.get_action_template(action=action, screenshot_path=ss_path)
-        middle_point = self.ss_match.get_point_from_template(page=page)
-
-        scroll_amt = page.viewport_size["height"] // 2
-        x_value, y_value = middle_point[0], middle_point[1]
-
-        while y_value > page.viewport_size["height"]:
-            page.mouse.wheel(0, scroll_amt)
-            y_value -= scroll_amt
-
-        return page.mouse.click(x_value, y_value)

@@ -44,3 +44,4 @@ dev = [
 filterwarnings = ["ignore", "default:::clippy"]
 pythonpaths = ["src", "tests"]
 # testpaths = ["tests/"]
+

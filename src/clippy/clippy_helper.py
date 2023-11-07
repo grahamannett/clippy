@@ -1,6 +1,6 @@
 import asyncio
 from argparse import Namespace
-from os import environ
+from collections import UserDict
 from pathlib import Path
 from typing import Dict, List
 
@@ -13,6 +13,11 @@ from clippy.dm import DataManager, TaskBankManager
 from clippy.instructor import Instructor, NextAction
 from clippy.states import Action, Step, Task
 from clippy.utils import _device_ratio_check, _get_input, _get_environ_var
+
+
+class AsyncTasksManager(UserDict):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
 
 class Clippy:
@@ -31,7 +36,7 @@ class Clippy:
         start_page: str = constants.default_start_page,
         headless: bool = False,
         key_exit: bool = True,
-        confirm: bool = False,
+        confirm_actions: bool = False,
         pause_start: bool = True,
         clear_step_states: bool = False,
         data_dir: str = f"{constants.ROOT_DIR}/data/",
@@ -40,14 +45,31 @@ class Clippy:
         seed: int | None = None,
         **kwargs,
     ) -> None:
+        """
+        Initialize the Clippy class.
+
+        Parameters:
+        objective (str): The objective of the task. Default is constants.default_objective.
+        start_page (str): The starting page of the task. Default is constants.default_start_page.
+        headless (bool): If True, the browser will run in headless mode. Default is False.
+        key_exit (bool): If True, the program will exit on key press. Default is True.
+        confirm_actions (bool): If True, actions will be confirmed before execution. Default is False.
+        pause_start (bool): If True, the program will pause at the start. Default is True.
+        clear_step_states (bool): If True, the step states will be cleared. Default is False.
+        data_dir (str): The directory where data will be stored. Default is "{constants.ROOT_DIR}/data/".
+        data_manager_path (str): The path to the data manager. Default is "{constants.ROOT_DIR}/data/tasks".
+        database_path (str): The path to the database. Default is "{constants.ROOT_DIR}/data/db/db.json".
+        seed (int | None): The seed for random number generation. Default is None.
+        """
+        self.DEBUG = _get_environ_var("DEBUG", False)
+
         # gui related settings
         self.headless = headless
         self.key_exit = key_exit
-        self.confirm = confirm
+        self.confirm_actions = confirm_actions
         self.pause_start = pause_start
 
         self.keep_device_ratio = _device_ratio_check()
-        self.DEBUG = _get_environ_var("DEBUG", "False")
 
         self.start_page = start_page
         self.objective = objective
@@ -76,24 +98,18 @@ class Clippy:
 
         return None
 
-    async def run(self, args: Namespace) -> None:
-        cmd = args.cmd
-
-        func = {
-            "capture": self.run_capture,
-            "replay": self.run_replay,
-            "datamanager": self.data_manager.run,
-        }.get(cmd, None)
-
-        if func is None:
+    async def run(self, run_kwargs: dict) -> None:
+        try:
+            cmd = run_kwargs.pop("cmd")
+            func = {
+                "capture": self.run_capture,
+                "replay": self.run_replay,
+                "datamanager": self.data_manager.run,
+            }[cmd]
+        except KeyError:
             raise Exception(f"`{cmd}` not supported in {self.__class__.__name__} mode")
 
-        return await func(**vars(args))
-
-    def check_command(self, cmd: str, kwargs: dict):
-        match cmd:
-            case "capture":
-                self._check_objective(kwargs)
+        return await func(**run_kwargs)
 
     def _get_random_task(self) -> str:
         task = self.tbm.sample()
@@ -113,6 +129,16 @@ class Clippy:
             if self.objective.startswith(("r", "random")):
                 self.objective = self.tbm.sample()
                 logger.info(f"Sampled task: {self.objective}")
+
+    def check_command(self, cmd, **kwargs) -> "Clippy":
+        match cmd:
+            case "capture":
+                self._check_objective(kwargs)
+
+        return self
+
+    def attach_task_callback(self, callback: callable) -> None:
+        self.task.callbacks.append(callback)
 
     async def wait_until(self, message: str = None, timeout: float = 1.0, **kwargs) -> None:
         # Ive tried a lot of things besides just sleeping but the order of stuff happening is not consistent
@@ -158,10 +184,14 @@ class Clippy:
         await self.async_tasks["crawler_pause"]
         await self.end_capture()
 
-    async def run_auto(self, user_confirm: bool = True, **kwargs):
+    async def run_auto(self, user_confirm: bool = True, action_delay: int = 0, max_actions: int = 5, **kwargs):
         page = await self.start_capture()
 
-        while True:
+        num_actions = 0
+
+        while num_actions < max_actions:
+            num_actions += 1
+
             next_action = await self.suggest_action()
             if user_confirm:
                 task_select = _get_input("Confirm action (q/b/*): ")
@@ -228,21 +258,25 @@ class Clippy:
 
         return elements
 
-    suffix_element_map = {
-        "link": "page",
-    }
-
-    def suffix_element(self, element: str) -> str:
-        try:
-            # split off the first word and add a suffix if it exists
-            _suffix = self.suffix_element_map.get(element.split(" ", 1)[0], "")
-            return f"{element} {_suffix}"
-        except:
-            return element
-
     async def suggest_action(
         self, num_elems: int = 100, previous_commands: List[str] = [], filter_elements: bool = True
     ) -> NextAction:
+        suffix_map = {"link": "page"}
+
+        def suffix_element(el: str) -> str:
+            """
+            The suffix is determined by the 'suffix_map' dictionary.
+
+            This method is useful in the context of suggesting actions for the Language Learning Model (LLM).
+            By adding a suffix to an element, we can provide more context to the LLM, which can help it make better suggestions.
+            """
+            try:
+                # split off the first word and add a suffix if it exists
+                _suffix = suffix_map.get(el.split(" ", 1)[0], "")
+                return f"{el} {_suffix}"
+            except:
+                return el
+
         async with Instructor() as instructor:
             # instructor = Instructor(use_async=True)
             self.dom_parser = DOMSnapshotParser(self.crawler)  # need cdp_client and page so makes sense to use crawler
@@ -254,7 +288,7 @@ class Clippy:
             # filter out text/images that are not actionable
             all_elements = await self.get_elements(filter_elements=True)
 
-            elements = [self.suffix_element(el) for el in all_elements]
+            elements = [suffix_element(el) for el in all_elements]
 
             # filter to only the first num_elems
             if num_elems:

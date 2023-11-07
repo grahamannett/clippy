@@ -3,7 +3,7 @@ import reflex as rx
 from trajlab.components.common import task_button
 from trajlab.components.sidebar import sidebar
 from trajlab.constants import sort_options, default_sort_by
-from trajlab.state import State, TaskState, TaskValuesDict
+from trajlab.trajlab_state import TrajState
 
 
 def index_extra_show_task_options() -> rx.Component:
@@ -16,13 +16,13 @@ def index_extra_show_task_options() -> rx.Component:
                 rx.heading("Show Details", size="sm"),
                 rx.checkbox(
                     "Datetime",
-                    is_checked=State.show_task_values["datetime"],
-                    on_change=lambda value: State.toggle_show_task_value("datetime", value),
+                    is_checked=TrajState.show_task_values["datetime"],
+                    on_change=lambda value: TrajState.toggle_show_task_value("datetime", value),
                 ),
                 rx.checkbox(
                     "Approval Status",
-                    is_checked=State.show_task_values["approval_status"],
-                    on_change=lambda value: State.toggle_show_task_value("approval_status", value),
+                    is_checked=TrajState.show_task_values["approval_status"],
+                    on_change=lambda value: TrajState.toggle_show_task_value("approval_status", value),
                 ),
             )
         )
@@ -37,11 +37,11 @@ def index_extra_sidebar() -> rx.Component:
         rx.container(
             rx.hstack(
                 rx.heading("Sort By", size="sm"),
-                rx.select(sort_options, default_value=default_sort_by, on_change=State.set_sort_by),
+                rx.select(sort_options, default_value=default_sort_by, on_change=TrajState.set_sort_by),
                 rx.select(
                     ["ascending", "descending"],
                     default_value="Ascending",
-                    on_change=lambda sort_direction: State.set_sort_direction(sort_direction),
+                    on_change=lambda sort_direction: TrajState.set_sort_direction(sort_direction),
                 ),
             )
         ),
@@ -58,10 +58,23 @@ def index() -> rx.Component:
         rx.flex(
             rx.spacer(),
             rx.vstack(
-                rx.button("New Task (random)", on_click=TaskState.initiate_new_random_task),
+                rx.hstack(
+                    rx.button("new (random)", on_click=TrajState.goto_newtask),
+                    rx.divider(orientation="vertical", border_color="black"),
+                    rx.button(
+                        "latest",
+                        on_click=lambda: TrajState.goto_task("current"),
+                        is_disabled=~TrajState.current_in_task_dirs,
+                    ),
+                    rx.divider(orientation="vertical", border_color="black"),
+                    rx.button(
+                        "download all tasks",
+                        on_click=TrajState.download_all_tasks,
+                    ),
+                ),
                 rx.divider(border_color="black"),
                 rx.foreach(
-                    State.tasks,
+                    TrajState.list_task_dirs,
                     task_button,
                 ),
             ),

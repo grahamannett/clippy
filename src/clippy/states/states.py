@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
@@ -168,6 +169,8 @@ class Task(ModelBase):
     curr_step: Optional[Step] = None
     timestamp: str | datetime = str(datetime.now())
 
+    callbacks: [] = field(default_factory=list)
+
     def __post_init__(self):
         """
         Post-initialization method. Generates a unique ID for the step if not provided.
@@ -176,7 +179,7 @@ class Task(ModelBase):
             # self.id = str(uuid.uuid5(UUID_NAMESPACE, self.objective))
             self.id = str(uuid.uuid4())
 
-    def __call__(self, action: Action, **kwargs) -> None:
+    async def __call__(self, action: Action, **kwargs) -> None:
         """
         Method to add an action to the current step of the task.
 
@@ -188,6 +191,13 @@ class Task(ModelBase):
 
         if not isinstance(action, Action):
             raise ValueError(f"action must be of type Action, not {type(action)}")
+
+        if self.callbacks:
+            for callback in self.callbacks:
+                if asyncio.iscoroutinefunction(callback):
+                    await callback(action, task=self)
+                else:
+                    callback(action, task=self)
 
         return self.curr_step(action, **kwargs)
 

@@ -17,5 +17,8 @@ def _device_ratio_check():
     return bool(strtobool(environ.get("KEEP_DEVICE_RATIO", "False")))
 
 
-def _get_environ_var(key: str, default: str = None) -> Any:
-    return environ.get(key, default)
+def _get_environ_var(key: str, default: Any) -> Any:
+    value = environ.get(key)
+    if value is not None:
+        return type(default)(value)
+    return default

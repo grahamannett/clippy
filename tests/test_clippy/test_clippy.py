@@ -9,7 +9,6 @@ from loguru import logger
 from playwright.async_api import expect
 
 from clippy.run import Clippy
-from tests.fixtures.cohere_responses import generation_responses
 from tests.fixtures.fixture_cases import HNTestCase
 
 
@@ -76,12 +75,6 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
         logger.info("Check page title")
 
         await expect(page).to_have_url("https://news.ycombinator.com/newest")
-        # await expect(page).to_have_title("New Links | Hacker News")
-
-        # logger.info(f"Suggest Action for {page.url[:50]}")
-        # action = await clippy.suggest_action()
-        # await clippy.use_action(action)
-
         await clippy.end_capture()
 
     async def test_capture_steps(self):

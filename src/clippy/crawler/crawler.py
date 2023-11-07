@@ -82,13 +82,6 @@ class Crawler:
         if hasattr(self, "ctx_manager"):
             await self.ctx_manager.__aexit__()
 
-    # def _end_sync(self):
-    #     self.page.close()
-    #     self.browser.close()
-    #     if self.cdp_client:
-    #         self.cdp_client.detach()
-    #     self.ctx_manager.__exit__()
-
     async def end(self) -> Awaitable[None] | None:
         if not self.is_async:
             raise Exception("end() can only be called in async mode")
@@ -129,16 +122,19 @@ class Crawler:
     def injection(self, ctx: Browser | Page, script: str) -> Awaitable | None:
         return ctx.add_init_script(path=script)
 
+    async def playwright_resume(self) -> Awaitable[None]:
+        return await self.page.evaluate(self.end_early_js)
+
     async def allow_end_early(self, end_early_str: str = "==press a key to exit=="):
         # not sure why but what i was prev using is broke:
-        # asyncio.to_thread(sys.stdout.write, end_early_str)
         if getattr(self.clippy, "DEBUG", False):
+            logger.debug("NOT ALLOWING TO END EARLY SINCE DEBUG=True")
             return
 
         logger.info(end_early_str.upper())
 
         while line := await asyncio.to_thread(sys.stdin.readline):
-            return await self.page.evaluate(self.end_early_js)
+            return await self.playwright_resume()
 
     def add_background_task(self, fn: Awaitable, name: str = None) -> asyncio.Task:
         task = asyncio.create_task(fn)

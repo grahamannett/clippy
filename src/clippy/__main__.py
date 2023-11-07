@@ -1,8 +1,8 @@
 import asyncio
 
-from clippy.run import run
+from clippy.run import setup_run
 
 
 if __name__ == "__main__":
-    clippy, args = run()
-    asyncio.run(clippy.run(args=args))
+    clippy, run_kwargs = setup_run()
+    asyncio.run(clippy.run(run_kwargs))

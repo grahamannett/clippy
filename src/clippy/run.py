@@ -1,6 +1,10 @@
 import argparse
 import asyncio
+from dataclasses import dataclass
 from os import environ
+
+from enum import StrEnum
+from simple_parsing import ArgumentParser, subparsers, field
 
 from clippy.clippy_helper import Clippy
 from clippy.constants import default_objective, default_start_page
@@ -14,21 +18,6 @@ def check_startup() -> None:
         raise Exception("COHERE_KEY not set in environment")
 
 
-def put_extra_args_on_namespace(args: argparse.Namespace, extra_args: list[str]) -> argparse.Namespace:
-    """converts extra args to kwargs"""
-    kwargs = {}
-    for arg in extra_args:
-        val = True
-        if arg.startswith("--"):
-            arg = arg[2:]
-        if "=" in arg:
-            arg, val = arg.split("=")
-            # kwargs[key] = val
-        setattr(args, arg, val)
-        breakpoint()
-        # else:
-        #     kwargs[arg] = True
-    return args
 
 
 def get_args():
@@ -40,7 +29,13 @@ def get_args():
     common.add_argument("--start_page", type=str, default=default_start_page)
     common.add_argument("--random_task", action="store_true", default=False)
     common.add_argument("-nk", "--no_keyexit", action="store_true", default=False)
-    common.add_argument("--confirm", action="store_true", default=False)
+    common.add_argument(
+        "-ca",
+        "--confirm_actions",
+        action="store_true",
+        default=False,
+        help="confirm actions before doing them in auto mode",
+    )
     common.add_argument(
         "--task",
         "-t",
@@ -81,17 +76,15 @@ def get_args():
     return args
 
 
-def run() -> tuple[Clippy, argparse.Namespace]:
+def setup_run() -> tuple[Clippy, dict[str, str | bool | int | None]]:
     check_startup()
 
-    args = get_args()
-    kwargs = vars(args)
+    kwargs = vars(get_args())
     clippy = Clippy(**kwargs)
-
-    clippy.check_command(cmd=args.cmd, kwargs=kwargs)
-    return clippy, args
+    clippy.check_command(**kwargs)
+    return clippy, kwargs
 
 
 if __name__ == "__main__":
-    clippy, args = run()
-    asyncio.run(clippy.run_capture(args=args))
+    clippy, kwargs = setup_run()
+    asyncio.run(clippy.run_capture(**kwargs))

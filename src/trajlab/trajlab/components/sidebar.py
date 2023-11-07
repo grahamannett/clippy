@@ -3,7 +3,7 @@ from typing import List
 import reflex as rx
 
 from trajlab.components.common import task_button
-from trajlab.state import MenuState, State
+from trajlab.trajlab_state import MenuState, TrajState
 
 
 # def sidebar(children: bool = False) -> rx.Component:
@@ -25,9 +25,9 @@ def sidebar(*children: List[rx.Component]) -> rx.Component:
                                     rx.heading("Tasks"),
                                     rx.accordion_icon(),
                                 ),
-                                rx.accordion_panel(
-                                    rx.foreach(State.tasks, task_button),
-                                ),
+                                # rx.accordion_panel(
+                                #     rx.foreach(State.tasks, task_button),
+                                # ),
                             ),
                             allow_toggle=True,
                             width="100%",
@@ -43,7 +43,7 @@ def sidebar(*children: List[rx.Component]) -> rx.Component:
                         ),
                         # on_click=MenuState.close_drawer,
                         rx.spacer(),
-                        rx.button("🔄 DB File", on_click=State.reload_database),
+                        rx.button("🔄 DB File", on_click=TrajState.reload_database),
                         rx.spacer(),
                         rx.button("Close", on_click=MenuState.right),
                     ),
@@ -54,4 +54,6 @@ def sidebar(*children: List[rx.Component]) -> rx.Component:
             is_open=MenuState.show_right,
             size="sm",
         ),
+        position="absolute",
+        right="0px",
     )

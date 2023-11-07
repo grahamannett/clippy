@@ -16,7 +16,7 @@ def truncate_string(input_str: str, max_length: int, suffix_str: str = "...") ->
     return f"{input_str[:max_length]}{suffix_str}" if len(input_str) > max_length else input_str
 
 
-def get_tasks(tasks_dir: str = tasks_dir) -> List[str]:
+def get_tasks(tasks_dir: str = tasks_dir) -> List[Path]:
     """
     Get a list of task directories from a specified directory.
 

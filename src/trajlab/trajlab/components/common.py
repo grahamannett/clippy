@@ -1,6 +1,6 @@
 import reflex as rx
 
-from trajlab.state import State, TaskState, TaskValuesDict
+from trajlab.trajlab_state import TrajState, TaskDirInfo
 
 
 def task_button_datetime(time_str: str) -> rx.Component:
@@ -13,18 +13,18 @@ def task_button_approval_status(approval_status: str) -> rx.Component:
     return rx.container(rx.text(f"{approval_status}"))
 
 
-def task_button(task_values: TaskValuesDict) -> rx.Component:
+def task_button(task_dir_info: TaskDirInfo) -> rx.Component:
     """Creates a button for a task with optional datetime and approval status."""
     return rx.box(
         rx.button(
-            rx.text(task_values["short_id"]),
+            rx.text(task_dir_info.short_id),
             rx.cond(
-                State.show_task_values["approval_status"] & task_values["clean_status"],
-                task_button_approval_status(task_values["clean_status"]),
+                TrajState.show_task_values["approval_status"],
+                task_button_approval_status(task_dir_info.status_emoji),
                 None,
             ),
-            rx.cond(State.show_task_values["datetime"], task_button_datetime(task_values["datetime"]), None),
-            on_click=lambda: TaskState.goto_task(task_values["id"]),
+            rx.cond(TrajState.show_task_values["datetime"], task_button_datetime(task_dir_info.timestamp), None),
+            on_click=lambda: TrajState.goto_task(task_dir_info.id),
         )
     )
 
@@ -51,12 +51,3 @@ def container(*children, **props):
 
 
 # COMMON --
-
-
-def header_rows(name: str, value: str, **kwargs) -> rx.Component:
-    """Creates a row with a name and a value."""
-    return rx.hstack(
-        rx.text(name),
-        rx.spacer(),
-        rx.text(value, **kwargs),
-    )

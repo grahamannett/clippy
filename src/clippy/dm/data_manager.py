@@ -6,9 +6,10 @@ from pathlib import Path
 
 from loguru import logger
 
-from clippy.dm.db_utils import Database
-from clippy.states import Task
 from clippy.dm.data_manager_utils import confirm_override
+from clippy.dm.db_utils import Database
+from clippy.constants import MIGRATION_DIR
+from clippy.states import Task
 
 
 class DataManager:
@@ -26,10 +27,6 @@ class DataManager:
         if database_path is not None:
             self.database_path: Path = Path(database_path)
             self.db = Database(database_path)
-
-    @staticmethod
-    def create_task(**kwargs) -> Task:
-        return Task(**kwargs)
 
     """RUN COMMANDS:
     --- TASKS FOLDER
@@ -65,6 +62,7 @@ class DataManager:
         return f"{self.task_data_dir}/current"
 
     def capture_task(self, task: Task) -> None:
+        self.capture_start()
         self.tasks.append(task)
         self._task = task
 
@@ -73,7 +71,9 @@ class DataManager:
             self.clear_current()
 
     def clear_current(self):
+        logger.info("check if clear current")
         if os.path.exists(self.curr_task_output):
+            logger.info("should clear current dir")
             shutil.rmtree(self.curr_task_output)
         os.makedirs(self.curr_task_output, exist_ok=True)
 
@@ -81,26 +81,25 @@ class DataManager:
         pass
 
     def migrate_data(self, move_current: bool = False, override: bool = False, **kwargs) -> None:
-        migration_dir = f"data/migrate"
         for folder in os.listdir(self.task_data_dir):
             # by default dont move current
             if "current" in folder and not move_current:
                 logger.info("skipping current folder...")
                 continue
 
-            if os.path.exists(f"{migration_dir}/{folder}"):
-                logger.info(f"overwrriting `{folder}` in `{migration_dir}` file")
+            if os.path.exists(f"{MIGRATION_DIR}/{folder}"):
+                logger.info(f"overwrriting `{folder}` in `{MIGRATION_DIR}` file")
                 if not override:
                     confirm_override = input("press c/y: ")
                     if confirm_override.lower() not in ["c", "y"]:
                         breakpoint()
 
-                shutil.rmtree(f"{migration_dir}/{folder}")
+                shutil.rmtree(f"{MIGRATION_DIR}/{folder}")
 
-            logger.info(f"moving `{self.task_data_dir}/{folder}` to `{migration_dir}`")
+            logger.info(f"moving `{self.task_data_dir}/{folder}` to `{MIGRATION_DIR}`")
             shutil.move(
                 f"{self.task_data_dir}/{folder}",
-                migration_dir,
+                MIGRATION_DIR,
             )
 
     def load(self):

@@ -37,3 +37,7 @@ action_delay = 1  # seconds
 TEMPLATES_DIR = f"{ROOT_DIR}/src/clippy/templates/"
 
 TASK_BANK_DIR = f"{ROOT_DIR}/src/taskgen/wordbank"
+
+# DATABASE RELATED
+MIGRATION_DIR = f"{ROOT_DIR}/data/migrate"
+TASKS_DATA_DIR = f"{ROOT_DIR}/data/tasks"
