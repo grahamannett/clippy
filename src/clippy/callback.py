@@ -4,6 +4,27 @@ from typing import Callable, Union
 
 
 class Callback:
+    """to use, decorate the function that you want to call on the class.
+    Means that ALL instances will invoke this callback.
+
+    i.e.
+    ```
+    class Task:
+        @Callback.register
+        async def page_change_async(self, *args, **kwargs) -> Step | None:
+    ```
+
+    then can be used like this:
+    ```
+    async def callback_fn_async(*args, **kwargs):
+        ...do stuff here
+
+    callback = Callback()
+    callback.add_callback(callback=callback_fn_async, on=Task.page_change_async)
+    ```
+
+    """
+
     _instance = None
     callbacks = {}
 
@@ -50,3 +71,11 @@ class Callback:
         if func_key not in self.callbacks:
             self.callbacks[func_key] = []
         self.callbacks[func_key].append(callback)
+
+    def clear_callback(self, on: Callable) -> None:
+        """
+        Method to clear all callbacks for a function.
+        """
+        func_key = f"{on.__module__}.{on.__qualname__}"
+        if func_key in self.callbacks:
+            self.callbacks[func_key] = []
