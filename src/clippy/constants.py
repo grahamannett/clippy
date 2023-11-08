@@ -32,6 +32,8 @@ input_delay = 100  # ms
 #  into but url does not change ideally this should be more `random`
 action_delay = 1  # seconds
 
+# STRING PRINTED TO CONSOLE WHEN KEY EXIT
+END_EARLY_STR = "==press a key to exit=="
 
 # TASK BANK RELATED
 TEMPLATES_DIR = f"{ROOT_DIR}/src/clippy/templates/"

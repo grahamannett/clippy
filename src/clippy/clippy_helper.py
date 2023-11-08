@@ -356,21 +356,3 @@ class Clippy:
                     previous_commands.append(last_cmd)
 
         return previous_commands
-
-    async def _get_locators_elements(self, num_elems: int = 150):
-        elements, locators = [], {}
-        for el, el_id in zip(self.dom_parser.elements_of_interest, self.dom_parser.ids_of_interest):
-            if not (loc := await self.dom_parser.get_locator(el, el_id)):
-                continue
-
-            # if its out of viewport we can stop looking for elems most likely
-            # actually think this will mess up if the elements are to the right of the viewport (i.e. google search filter)
-            if isinstance(loc, Locators.ElementOutOfViewport):
-                continue
-
-            elements.append(el)
-            locators[el_id] = loc
-
-            if len(elements) >= num_elems:
-                break
-        return elements, locators

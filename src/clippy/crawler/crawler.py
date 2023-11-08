@@ -2,13 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import sys
-from typing import Awaitable
+from typing import Awaitable, Callable, Sequence
 
 from loguru import logger
 from playwright.async_api import Browser, BrowserContext, CDPSession, Page, PlaywrightContextManager
 
-from clippy.constants import default_preload_injection_script, default_user_agent, default_viewport_size, input_delay
+from clippy.constants import (
+    default_preload_injection_script,
+    default_user_agent,
+    default_viewport_size,
+    input_delay,
+    END_EARLY_STR,
+)
 from clippy.crawler.selectors import Selector
+from clippy.states.actions import NextAction
 
 
 class Crawler:
@@ -31,7 +38,7 @@ class Crawler:
         self,
         is_async: bool = True,
         headless: bool = False,
-        clippy: "Clippy" = None,
+        clippy: Clippy = None,
     ) -> None:
         self._started = False
         self.is_async = is_async
@@ -69,6 +76,17 @@ class Crawler:
 
         page = page or self.page
         return self.add_background_task(page.pause(), name="crawler_pause")
+
+    def _check_if_instance_properties(self, use_instance_properties: bool, **kwargs):
+        if use_instance_properties:
+            # this makes it so we can use context manager and pass in args on init rather than here
+            # could probably refactor part of this to be a classmethod instead
+            start_page = self.start_page or start_page
+            headless = self.headless or headless
+
+            # save them as well to the instance
+            self.start_page = start_page
+            self.headless = headless
 
     async def _end_async(self):
         # close cdp client before page
@@ -125,7 +143,7 @@ class Crawler:
     async def playwright_resume(self) -> Awaitable[None]:
         return await self.page.evaluate(self.end_early_js)
 
-    async def allow_end_early(self, end_early_str: str = "==press a key to exit=="):
+    async def allow_end_early(self, end_early_str: str = END_EARLY_STR, callback: Callable = None) -> Awaitable[None]:
         # not sure why but what i was prev using is broke:
         if getattr(self.clippy, "DEBUG", False):
             logger.debug("NOT ALLOWING TO END EARLY SINCE DEBUG=True")
@@ -134,7 +152,10 @@ class Crawler:
         logger.info(end_early_str.upper())
 
         while line := await asyncio.to_thread(sys.stdin.readline):
-            return await self.playwright_resume()
+            resp = await self.playwright_resume()
+            if callback:
+                return callback(resp, line=line)
+            return resp
 
     def add_background_task(self, fn: Awaitable, name: str = None) -> asyncio.Task:
         task = asyncio.create_task(fn)
@@ -143,18 +164,7 @@ class Crawler:
         logger.info(f"added task {name}")
         return task
 
-    def _check_if_instance_properties(self, use_instance_properties: bool, **kwargs):
-        if use_instance_properties:
-            # this makes it so we can use context manager and pass in args on init rather than here
-            # could probably refactor part of this to be a classmethod instead
-            start_page = self.start_page or start_page
-            headless = self.headless or headless
-
-            # save them as well to the instance
-            self.start_page = start_page
-            self.headless = headless
-
-    async def page_size(self):
+    async def page_size(self) -> Sequence[int]:
         device_pixel_ratio = await self.page.evaluate("window.devicePixelRatio")
         win_scroll_x = await self.page.evaluate("window.scrollX")
         win_scroll_y = await self.page.evaluate("window.scrollY")
@@ -164,29 +174,28 @@ class Crawler:
         win_height = await self.page.evaluate("window.screen.height")
         return (device_pixel_ratio, win_scroll_x, win_scroll_y, win_upper_bound, win_left_bound, win_width, win_height)
 
-    async def execute_action(self, action: "NextAction"):
+    async def execute_action(self, action: NextAction):
         _actions = {
             "type": self.execute_type,
             "click": self.execute_click,
         }
         await _actions[action.action](action)
 
-    async def execute_click(self, action: "NextAction", **kwargs):
+    async def execute_click(self, action: NextAction, **kwargs):
         loc = action.locator.nth(0)
+        logger.info(f"doing click at {loc}")
         await loc.click(delay=self.input_delay)
         await self.page.wait_for_load_state()
 
-    async def execute_type(self, action: "NextAction", **kwargs):
-        logger.info("doing click...")
+    async def execute_type(self, action: NextAction, **kwargs):
         await self.execute_click(action)
-        # await asyncio.sleep(self.input_delay)
+
         logger.info(f"doing type...{action.action_args}")
         await self.page.keyboard.type(action.action_args, delay=self.input_delay)
 
         logger.info("doing enter...")
         # TODO: i should ask for next action after typing from LM, NOT just press enter
         await self.page.keyboard.press("Enter", delay=self.input_delay)
-        # await asyncio.sleep(action_delay)
 
     @staticmethod
     def sync_playwright():

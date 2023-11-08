@@ -104,7 +104,7 @@ class CaptureAsync(Capture):
             action = None
 
         if action:
-            await self.task(action)
+            self.task(action)
 
     async def hook_request_navigation_response(request: Request):
         if request.is_navigation_request():

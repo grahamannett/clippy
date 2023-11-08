@@ -1,16 +1,19 @@
-import asyncio
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any, List, Optional, Tuple
+from functools import wraps
+
 
 from playwright.async_api import Frame, Page
 from playwright.sync_api import Frame as FrameSync
 from playwright.sync_api import Page as PageSync
 
+
+from clippy.constants import max_url_length
+from clippy.callback import Callback
 from clippy.states.actions import Action, Actions
 from clippy.states.base import ModelBase
-from clippy.constants import max_url_length
 
 UUID_NAMESPACE = uuid.NAMESPACE_OID
 
@@ -169,8 +172,6 @@ class Task(ModelBase):
     curr_step: Optional[Step] = None
     timestamp: str | datetime = str(datetime.now())
 
-    callbacks: [] = field(default_factory=list)
-
     def __post_init__(self):
         """
         Post-initialization method. Generates a unique ID for the step if not provided.
@@ -179,7 +180,7 @@ class Task(ModelBase):
             # self.id = str(uuid.uuid5(UUID_NAMESPACE, self.objective))
             self.id = str(uuid.uuid4())
 
-    async def __call__(self, action: Action, **kwargs) -> None:
+    def __call__(self, action: Action, **kwargs) -> None:
         """
         Method to add an action to the current step of the task.
 
@@ -191,13 +192,6 @@ class Task(ModelBase):
 
         if not isinstance(action, Action):
             raise ValueError(f"action must be of type Action, not {type(action)}")
-
-        if self.callbacks:
-            for callback in self.callbacks:
-                if asyncio.iscoroutinefunction(callback):
-                    await callback(action, task=self)
-                else:
-                    callback(action, task=self)
 
         return self.curr_step(action, **kwargs)
 
@@ -314,6 +308,7 @@ class Task(ModelBase):
         """
         return self.__repr__()
 
+    @Callback.register
     async def page_change_async(self, *args, **kwargs) -> Step | None:
         """
         Asynchronous method to handle page change.
@@ -323,6 +318,7 @@ class Task(ModelBase):
         page : Page | Frame | str
             The new page.
         """
+
         return self.page_change(*args, **kwargs)
 
     def page_change(self, page: Page | Frame = None, url: str = None) -> Step | None:
@@ -344,9 +340,6 @@ class Task(ModelBase):
 
         self.current = Step(url=url)
         return self.current
-
-        # self.steps.append(self.curr_step)
-        # return self.curr_step
 
     def _add_step(self, step: Step):
         """

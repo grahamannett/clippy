@@ -41,3 +41,5 @@ class TestDataManger(unittest.TestCase):
         self.data_manager.migrate_data(move_current=True, override=True)
         self.assertFalse(os.path.exists("data/tasks/current"))
         self.assertTrue(os.path.exists("data/migrate/current"))
+
+
