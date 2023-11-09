@@ -61,6 +61,9 @@ class DataManager:
     def curr_task_output(self) -> str:
         return f"{self.task_data_dir}/current"
 
+    def get_curr_step_screenshot_path(self) -> str:
+        return f"{self.curr_task_output}/{self.task.current.id}.png"
+
     def capture_task(self, task: Task) -> None:
         self.capture_start()
         self.tasks.append(task)

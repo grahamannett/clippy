@@ -2,12 +2,14 @@ import os
 
 import cv2
 from playwright.async_api import Page
+from clippy.dm.data_manager import DataManager
 
 from clippy.states import Action
 
 
 class ScreenshotMatcher:
-    def __init__(self) -> None:
+    def __init__(self, data_manager: DataManager) -> None:
+        self.data_manager = data_manager
         self.data_dir = "data/tmp/screenshots"
 
     def get_latest_screenshot_path(self, data_dir, task_id, step_id):

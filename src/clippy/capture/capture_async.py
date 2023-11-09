@@ -83,8 +83,9 @@ class CaptureAsync(Capture):
         if current_step.id in self.captured_screenshot_ids:
             return
 
-        current_step.screenshot_path = f"{self.data_manager.curr_task_output}/{current_step.id}.png"
-        await self.crawler.page.screenshot(path=current_step.screenshot_path, full_page=True)
+        screenshot_path = self.data_manager.get_curr_step_screenshot_path()
+        current_step.screenshot_path = screenshot_path
+        await self.crawler.page.screenshot(path=screenshot_path, full_page=True)
         self.captured_screenshot_ids.append(current_step.id)
 
         self.async_tasks["screenshot_event"].set()

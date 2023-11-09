@@ -56,6 +56,18 @@ class Crawler:
     async def __aexit__(self, exc_type, exc, tb):
         await self._end_async()
 
+    @staticmethod
+    def sync_playwright():
+        from playwright.sync_api import sync_playwright
+
+        return sync_playwright
+
+    @staticmethod
+    def async_playwright():
+        from playwright.async_api import async_playwright
+
+        return async_playwright
+
     @property
     def title(self):
         return self.page.title()
@@ -174,13 +186,6 @@ class Crawler:
         win_height = await self.page.evaluate("window.screen.height")
         return (device_pixel_ratio, win_scroll_x, win_scroll_y, win_upper_bound, win_left_bound, win_width, win_height)
 
-    # async def execute_action(self, action: NextAction):
-    #     _actions = {
-    #         "type": self.execute_type,
-    #         "click": self.execute_click,
-    #     }
-    #     await _actions[action.action](action)
-
     async def execute_click(self, action: NextAction, **kwargs):
         loc = action.locator.nth(0)
         logger.info(f"doing click at {loc}")
@@ -210,14 +215,9 @@ class Crawler:
         elif action.action == "scrollup":
             await self.page.mouse.wheel(delta_x=0, delta_y=direction(-1))
 
-    @staticmethod
-    def sync_playwright():
-        from playwright.sync_api import sync_playwright
-
-        return sync_playwright
-
-    @staticmethod
-    def async_playwright():
-        from playwright.async_api import async_playwright
-
-        return async_playwright
+    actions = {
+        "type": execute_type,
+        "click": execute_click,
+        "scrolldown": execute_scroll,
+        "scrollup": execute_scroll,
+    }

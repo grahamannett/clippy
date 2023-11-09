@@ -284,21 +284,15 @@ class Clippy:
             None
         """
         logger.info(f"begin use-action: {action}")
+        action_type = action.action  # this is a weird name for this attribute
         self.used_next_actions.append(action)
         self.async_tasks["screenshot_event"].clear()
 
         if action_locator := getattr(action, "locator", None):
             await action_locator.first.scroll_into_view_if_needed(timeout=5000)
 
-        _actions = {
-            "type": self.crawler.execute_type,
-            "click": self.crawler.execute_click,
-            "scrolldown": self.crawler.execute_scroll,
-            "scrollup": self.crawler.execute_scroll,
-        }
-
         # execute the action
-        await _actions[action.action](action)
+        await self.crawler.actions[action_type](action)
 
         # use merge on steps as the capture might be multiple (e.g. click input and type)
         self.task.steps[-1].merge()
