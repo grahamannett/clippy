@@ -1,10 +1,9 @@
-import argparse
 import asyncio
 from dataclasses import dataclass
 from os import environ
+from typing import Optional, Union
 
-from enum import StrEnum
-from simple_parsing import ArgumentParser, subparsers, field
+from simple_parsing import ArgumentParser, choice
 
 from clippy.clippy_helper import Clippy
 from clippy.constants import default_objective, default_start_page
@@ -18,68 +17,77 @@ def check_startup() -> None:
         raise Exception("COHERE_KEY not set in environment")
 
 
+@dataclass
+class Replay:
+    """Arguments for the 'replay' command"""
+
+    file: Optional[str] = None
+
+
+@dataclass
+class Capture:
+    """Arguments for the 'capture' command"""
+
+    llm: bool = False
+
+
+@dataclass
+class Assist:
+    """Arguments for the 'assist' command"""
+
+    file: Optional[str] = None
+    llm: bool = True
+    action_delay: float = 0.5
+    max_actions: int = 5
+
+    confirm_actions: bool = True
+
+
+@dataclass
+class DataManager:
+    """Arguments for the 'datamanager' command"""
+
+    subcmd: Optional[str] = None
+    move_current: bool = False
+    override: bool = False
+    table: Optional[str] = None
+    droplast: bool = False
+
+
+@dataclass
+class ClippyArgs:
+    """class docstring"""
+
+    command: Union[Assist, Capture, Replay, DataManager]
+
+    objective: str = default_objective
+    seed: int = None
+
+    headless: bool = False  # should run without a browser window
+    exec_type: str = choice("sync", "async", default="async")  # should run in async or sync mode
+    start_page: str = default_start_page
+    random_task: bool = False
+    key_exit: bool = True  # should exit on key press
+    confirm_actions: bool = False
+    task: int = None
+
+    def __post_init__(self):
+        self.cmd = self.command.__class__.__name__.lower()
 
 
 def get_args():
-    common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--objective", type=str, default=default_objective)
-    common.add_argument("--seed", type=int, default=None)
-    common.add_argument("--headless", action="store_true")
-    common.add_argument("--exec_type", type=str, choices=["sync", "async"], default="async")
-    common.add_argument("--start_page", type=str, default=default_start_page)
-    common.add_argument("--random_task", action="store_true", default=False)
-    common.add_argument("-nk", "--no_keyexit", action="store_true", default=False)
-    common.add_argument(
-        "-ca",
-        "--confirm_actions",
-        action="store_true",
-        default=False,
-        help="confirm actions before doing them in auto mode",
-    )
-    common.add_argument(
-        "--task",
-        "-t",
-        nargs="?",
-        type=int,
-        default=None,
-        const=-1,
-        help="task bank index to sample from - or random to sample a random task",
-    )
+    parser = ArgumentParser()
+    parser.add_arguments(ClippyArgs, dest="clippy_args")
+    args = parser.parse_args()
 
-    parser = argparse.ArgumentParser(description="🤠 clippy")
-
-    # SUBPARSERS ---
-    subparsers = parser.add_subparsers(dest="cmd")
-    replay_subparser = subparsers.add_parser("replay", help="replay a task", parents=[common])
-    replay_subparser.add_argument("--file", type=str, default=None, help="path to file to replay")
-
-    capture_subparser = subparsers.add_parser("capture", help="capture a task", parents=[common])
-    capture_subparser.add_argument("--llm", default=False, action="store_true")
-
-    assist_subparser = subparsers.add_parser("assist", help="assist a task", parents=[common])
-    assist_subparser.add_argument("--file", type=str, default=None, help="path to file to replay")
-
-    datamanager_subparser = subparsers.add_parser("datamanager", help="assist a task", parents=[common])
-    datamanager_subparser.add_argument("subcmd", type=str, default=None, help="datamanager cmd to do")
-    datamanager_subparser.add_argument("--move_current", type=bool, default=False, help="move ")
-    datamanager_subparser.add_argument("--override", type=bool, default=False)
-    # db related args
-    datamanager_subparser.add_argument("--table", type=str, default=None, help="table name")
-    datamanager_subparser.add_argument("--droplast", action="store_true", help="only drop last from table")
-
-    # GET' EM ---
-    args, _ = parser.parse_known_args()
-
-    # flip the keyexit flag
-    args.key_exit = not args.no_keyexit
-
-    return args
+    return args.clippy_args
 
 
 def setup_run() -> tuple[Clippy, dict[str, str | bool | int | None]]:
     check_startup()
 
-    kwargs = vars(get_args())
+    clippy_args = get_args()
+    kwargs = vars(clippy_args)
     clippy = Clippy(**kwargs)
     clippy.check_command(**kwargs)
     return clippy, kwargs
