@@ -1,16 +1,21 @@
 import asyncio
 import json
-from typing import Awaitable
 
 from loguru import logger
-from playwright.async_api import ConsoleMessage, Frame, Page, Request
+from playwright.async_api import ConsoleMessage, Page, Request
 
-from clippy.capture.capture import Capture, MachineCapture
+from clippy.capture.capture import Capture
 from clippy.crawler.crawler import Crawler
-from clippy.crawler.parser.playwright_strings import _parse_segment
 from clippy.crawler.tools_capture import _print_console
 from clippy.dm.data_manager import DataManager
-from clippy.states import Action, Actions, Click, Enter, Input, Step, Task, Wheel
+from clippy.states import Action, Actions
+
+
+def log_hook(name: str):
+    async def hook(*args, **kwargs):
+        logger.info(f"[LOG-HOOK|{name.upper()}] {args} {kwargs}")
+
+    return hook
 
 
 async def all_console_log(msg: ConsoleMessage):
@@ -39,13 +44,6 @@ async def catch_console_injections(msg: ConsoleMessage, print_injection: bool = 
     return action
 
 
-def log_hook(name: str):
-    async def hook(*args, **kwargs):
-        logger.info(f"!!{name.upper()} {args} {kwargs}")
-
-    return hook
-
-
 class CaptureAsync(Capture):
     def __init__(
         self,
@@ -65,6 +63,7 @@ class CaptureAsync(Capture):
 
         self.captured_screenshot_ids = []
         self.captured_screenshot_urls = []
+        self._use_log_hook = False
 
     async def hook_dom_group(self, page: Page):
         logger.info(f"PAGE-CHANGE|{page.url}")
@@ -115,10 +114,11 @@ class CaptureAsync(Capture):
         page.on("domcontentloaded", self.hook_dom_group)
 
         # hooks that are only helpful when understanding the lifecycle of page/frames
-        # page.on("framenavigated", log_hook("framenavigated"))
-        # page.on("domcontentloaded", log_hook("domcontentloaded"))
-        # page.on("frameattached", log_hook("frameattached"))
-        # page.on("requestfinished", log_hook("requestfinished"))
+        if self._use_log_hook:
+            page.on("framenavigated", log_hook("framenavigated"))
+            page.on("domcontentloaded", log_hook("domcontentloaded"))
+            page.on("frameattached", log_hook("frameattached"))
+            page.on("requestfinished", log_hook("requestfinished"))
 
     async def start(self, crawler: Crawler, start_page: str | bool = False) -> Page:
         self.crawler = crawler
@@ -136,6 +136,3 @@ class CaptureAsync(Capture):
             await page.goto(start_page)
 
         return page
-
-    async def end(self):
-        pass
