@@ -115,7 +115,9 @@ class Step(ModelBase):
         merged_actions = [self.actions.pop(0)]
 
         for idx, action in enumerate(self.actions):
-            if isinstance(action, merged_actions[-1].__class__) and (merged_actions[-1].should_merge(action)):
+            # im not sure why i had it before with __class__ isinstance check
+            # if isinstance(action, merged_actions[-1].__class__) and (merged_actions[-1].should_merge(action)):
+            if merged_actions[-1].should_merge(action):
                 merged_actions[-1].update(action)
             else:
                 merged_actions.append(action)

@@ -1,18 +1,20 @@
 import asyncio
-from argparse import Namespace
 from collections import UserDict
+from dataclasses import asdict
 from pathlib import Path
 from typing import Dict, List
 
 from loguru import logger
 
 from clippy import constants
-from clippy.capture import CaptureAsync, MachineCaptureAsync
-from clippy.crawler import Crawler, DOMSnapshotParser, Locators, Page
+from clippy.callback import Callback
+from clippy.capture import CaptureAsync
+from clippy.crawler import Crawler, Page
+from clippy.crawler.parser.dom_snapshot import DOMSnapshotParser, element_allowed_fn
 from clippy.dm import DataManager, TaskBankManager
 from clippy.instructor import Instructor, NextAction
 from clippy.states import Action, Step, Task
-from clippy.utils import _device_ratio_check, _get_input, _get_environ_var
+from clippy.utils import _device_ratio_check, _get_environ_var, _get_input
 
 
 class AsyncTasksManager(UserDict):
@@ -25,6 +27,7 @@ class Clippy:
     crawler: Crawler
     capture: CaptureAsync
     data_manager: DataManager
+    callback_manager: Callback = Callback()
 
     # async_tasks means background processes, not a clippy `Task`
     async_tasks: Dict[str, asyncio.Task | asyncio.Event | asyncio.Condition] = {}
@@ -98,18 +101,45 @@ class Clippy:
 
         return None
 
-    async def run(self, run_kwargs: dict) -> None:
-        try:
-            cmd = run_kwargs.pop("cmd")
-            func = {
-                "capture": self.run_capture,
-                "replay": self.run_replay,
-                "datamanager": self.data_manager.run,
-            }[cmd]
-        except KeyError:
-            raise Exception(f"`{cmd}` not supported in {self.__class__.__name__} mode")
+    def _get_previous_commands_from_generated(self, previous_commands: List[str] = []):
+        pass
+        # for used_action in self.used_next_actions:
+        #     previous_commands.append(used_action.format_)
 
-        return await func(**run_kwargs)
+    def _get_previous_commands(self, previous_commands: List[str] = []):
+        next_action_idx = 0
+
+        def _match_cmd_with_used_actions(action):
+            if not hasattr(action, "python_locator"):
+                return None
+
+            nonlocal next_action_idx
+            element_id = self.used_next_actions[next_action_idx].element_id
+
+            # if we use the element_id and it is not the last one, then increment the next_action_idx
+            if (next_action_idx + 1) < len(self.used_next_actions):
+                next_action_idx += 1
+
+            return element_id
+
+        if len(self.task.steps) >= 1:
+            for step in self.task.steps:
+                for action in step.actions:
+                    if not isinstance(action, Action):
+                        raise Exception("action is not an Action")
+
+                    # last_cmd = f"{action.__class__.__name__}"
+                    last_cmd = action.format_for_llm(element_id=_match_cmd_with_used_actions(action))
+
+                    # gen_action = self.used_next_actions[next_action_idx]
+                    # last_cmd = f"{action.__class__.__name__} {gen_action.element_id}"
+
+                    # if gen_action.action_args:
+                    #     last_cmd += f" - {gen_action.action_args}"
+
+                    previous_commands.append(last_cmd)
+
+        return previous_commands
 
     def _get_random_task(self) -> str:
         task = self.tbm.sample()
@@ -130,15 +160,29 @@ class Clippy:
                 self.objective = self.tbm.sample()
                 logger.info(f"Sampled task: {self.objective}")
 
+    async def run(self, run_kwargs: dict) -> None:
+        try:
+            cmd = run_kwargs.pop("cmd")
+            func = {
+                "capture": self.run_capture,
+                "replay": self.run_replay,
+                "datamanager": self.data_manager.run,
+                "assist": self.run_assist,
+            }[cmd]
+        except KeyError:
+            raise Exception(f"`{cmd}` not supported in {self.__class__.__name__} mode")
+
+        cmd_kwargs = asdict(run_kwargs.pop("command"))
+        all_kwargs = {**run_kwargs, **cmd_kwargs}
+
+        return await func(**all_kwargs)
+
     def check_command(self, cmd, **kwargs) -> "Clippy":
         match cmd:
             case "capture":
                 self._check_objective(kwargs)
 
         return self
-
-    def attach_task_callback(self, callback: callable) -> None:
-        self.task.callbacks.append(callback)
 
     async def wait_until(self, message: str = None, timeout: float = 1.0, **kwargs) -> None:
         # Ive tried a lot of things besides just sleeping but the order of stuff happening is not consistent
@@ -175,16 +219,16 @@ class Clippy:
         await self.crawler.end()
         self.data_manager.save()
 
-    async def run_assist(self, **kwargs):
-        raise NotImplementedError
-
     async def run_capture(self, **kwargs):
         await self.start_capture()
         # if we capture we dont want to close browser so we will await on pause_start
         await self.async_tasks["crawler_pause"]
         await self.end_capture()
 
-    async def run_auto(self, user_confirm: bool = True, action_delay: int = 0, max_actions: int = 5, **kwargs):
+    async def run_assist(self, confirm_actions: bool = None, action_delay: int = 0, max_actions: int = 5, **kwargs):
+        confirm_actions = confirm_actions or self.confirm_actions
+        # disable key exit before start capture
+        self.key_exit = False
         page = await self.start_capture()
 
         num_actions = 0
@@ -193,9 +237,9 @@ class Clippy:
             num_actions += 1
 
             next_action = await self.suggest_action()
-            if user_confirm:
-                task_select = _get_input("Confirm action (q/b/*): ")
-                if task_select == "q":
+            if confirm_actions:
+                task_select = _get_input("Confirm action [Q(uit)/B(reakpoint)/C(ontinue)/*): ")
+                if task_select.lower() == "q":
                     await self.end_capture()
                     exit()
                 elif task_select == "b":
@@ -239,13 +283,25 @@ class Clippy:
         Returns:
             None
         """
+        logger.info(f"begin use-action: {action}")
         self.used_next_actions.append(action)
         self.async_tasks["screenshot_event"].clear()
 
-        if hasattr(action, "locator"):
-            await action.locator.first.scroll_into_view_if_needed()
+        if action_locator := getattr(action, "locator", None):
+            await action_locator.first.scroll_into_view_if_needed(timeout=5000)
 
-        await self.crawler.execute_action(action)
+        _actions = {
+            "type": self.crawler.execute_type,
+            "click": self.crawler.execute_click,
+            "scrolldown": self.crawler.execute_scroll,
+            "scrollup": self.crawler.execute_scroll,
+        }
+
+        # execute the action
+        await _actions[action.action](action)
+
+        # use merge on steps as the capture might be multiple (e.g. click input and type)
+        self.task.steps[-1].merge()
 
     async def get_elements(self, filter_elements: bool = True):
         self.dom_parser = DOMSnapshotParser(self.crawler)
@@ -262,8 +318,9 @@ class Clippy:
         self, num_elems: int = 100, previous_commands: List[str] = [], filter_elements: bool = True
     ) -> NextAction:
         suffix_map = {"link": "page"}
+        previous_commands = self._get_previous_commands(previous_commands)
 
-        def suffix_element(el: str) -> str:
+        def _suffix_fn(el: str) -> str:
             """
             The suffix is determined by the 'suffix_map' dictionary.
 
@@ -277,18 +334,23 @@ class Clippy:
             except:
                 return el
 
+        def _filter_elem_fn(elems):
+            if not filter_elements:
+                return elems
+
+            return list(filter(element_allowed_fn, elems))
+
         async with Instructor() as instructor:
             # instructor = Instructor(use_async=True)
             self.dom_parser = DOMSnapshotParser(self.crawler)  # need cdp_client and page so makes sense to use crawler
+            await self.dom_parser.parse()
             title = await self.crawler.title
-
-            previous_commands = self._get_previous_commands(previous_commands)
 
             # get all the links/actions -- TODO: should these be on the instructor?
             # filter out text/images that are not actionable
-            all_elements = await self.get_elements(filter_elements=True)
-
-            elements = [suffix_element(el) for el in all_elements]
+            # all_elements = await self.get_elements(filter_elements=True)
+            all_elements = _filter_elem_fn(self.dom_parser.elements_of_interest)
+            elements = list(map(_suffix_fn, all_elements))
 
             # filter to only the first num_elems
             if num_elems:
@@ -326,33 +388,10 @@ class Clippy:
             logger.info(f"transforming response...{raw_action.text}")
             next_action = await instructor.transform_action(raw_action.text, temperature=0.2)
             if not (next_action.is_scroll() or next_action.is_done()):
-                next_action.locator = self._get_locator_for_action(next_action)
+                next_action.locator = self.dom_parser.get_loc_helper(
+                    self.dom_parser.page_element_buffer[next_action.element_id]
+                )
 
             logger.info(f"transformed {raw_action.text} to {next_action}")
-        # await instructor.end()
+
         return next_action
-
-    def _get_locator_for_action(self, action: NextAction):
-        element_buffer = self.dom_parser.page_element_buffer[action.element_id]
-        loc = self.dom_parser.get_loc_helper(element_buffer)
-        return loc
-
-    def _get_previous_commands(self, previous_commands: List[str] = []):
-        next_action_idx = 0
-        if len(self.task.steps) >= 1:
-            for step in self.task.steps:
-                for action in step.actions:
-                    if not isinstance(action, Action):
-                        breakpoint()
-                        raise Exception("action is not an Action")
-
-                    gen_action = self.used_next_actions[next_action_idx]
-                    last_cmd = f"{action.__class__.__name__} {gen_action.element_id}"
-
-                    if gen_action.action_args:
-                        last_cmd += f" - {gen_action.action_args}"
-
-                    next_action_idx += 1
-                    previous_commands.append(last_cmd)
-
-        return previous_commands

@@ -32,6 +32,10 @@ class NextAction:
         """Check if the action is 'done'."""
         return self.action == "done"
 
+    def format(self):
+        """format the action for printing"""
+        return f"{self.action}({self.element_id}, {self.element_metadata}, {self.action_args})"
+
 
 @dataclass
 class ActionMetadata:
@@ -217,6 +221,9 @@ class Click(ActionMetadata, Action):
             if isinstance(self.bounding_box, dict):
                 self.bounding_box = BoundingBox(**self.bounding_box)
 
+    def format_for_llm(self, element_id: int, **kwargs) -> str:
+        return f"click {element_id}"
+
     def callback(self, page: Page, path: str) -> Awaitable:
         """
         Asynchronous callback method for the Click instance.
@@ -288,6 +295,9 @@ class Input(ActionMetadata, Action):
         self.position = Position(self.x, self.y)
         self.allow_merge = True
 
+    def format_for_llm(self, **kwargs) -> str:
+        return f'type "{self.value}"'
+
     def update(self, action: "Input") -> "Input":
         """
         Updates the value of the input.
@@ -324,6 +334,9 @@ class Enter(ActionMetadata, Action):
     """
 
     value: str = None  # The value to enter
+
+    def format_for_llm(self, **kwargs) -> str:
+        return f"press enter"
 
 
 @dataclass

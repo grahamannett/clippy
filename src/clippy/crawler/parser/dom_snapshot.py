@@ -51,7 +51,12 @@ class ElementOutOfViewport:
     bounds: Tuple[int, int, int, int]
 
 
-def element_allowed(element: str):
+class Locators:
+    ElementOutOfViewport = ElementOutOfViewport
+    Locator = Locator
+
+
+def element_allowed_fn(element: str):
     for t in TYPEABLE + CLICKABLE:
         if t in element:
             return True
@@ -60,33 +65,31 @@ def element_allowed(element: str):
 
 def filter_page_elements(elements: List[str]) -> Iterator[str]:
     for element in elements:
-        if element_allowed(element):
+        if element_allowed_fn(element):
             yield element
 
 
 def get_action_type(element: str) -> str:
-    for t in TYPEABLE:
-        if t in element:
-            return "type"
-
-    for t in CLICKABLE:
-        if t in element:
-            return "click"
-
-    raise ValueError(f"Could not find action type for {element}")
+    if any(t in element for t in TYPEABLE):
+        return "type"
+    elif any(t in element for t in CLICKABLE):
+        return "click"
+    else:
+        raise ValueError(f"Could not find action type for {element}")
 
 
 def convert_name(node_name: str, has_click_handler: bool):
-    if node_name == "a":
-        return "link"
-    elif node_name in ["select", "img", "input"]:
-        return node_name
-    elif node_name in "button" or has_click_handler:  # found pages that needed this quirk
-        return "button"
-    elif node_name == "textarea":
-        return "input"
-    else:
-        return "text"
+    match node_name:
+        case "a":
+            return "link"
+        case "select" | "img" | "input":
+            return node_name
+        case "button" | _ if has_click_handler:  # found pages that needed this quirk
+            return "button"
+        case "textarea":
+            return "input"
+        case _:
+            return "text"
 
 
 def find_attributes(attributes: List[int], keys: List[str], strings: List[str]):
@@ -175,12 +178,55 @@ def _out_of_viewport_element(element_buffer: Dict[str, Any], page_viewport: Dict
     return ElementOutOfViewport((scroll_x, scroll_y), (el_x, el_y, el_w, el_h))
 
 
-class Locators:
-    ElementOutOfViewport = ElementOutOfViewport
-    Locator = Locator
+class DOMParser:
+    async def _get_locators_elements(self, num_elems: int = 150):
+        elements, locators = [], {}
+        for el, el_id in zip(self.elements_of_interest, self.ids_of_interest):
+            if not (loc := await self.get_locator(el, el_id)):
+                continue
+
+            # if its out of viewport we can stop looking for elems most likely
+            # actually think this will mess up if the elements are to the right of the viewport (i.e. google search filter)
+            if isinstance(loc, Locators.ElementOutOfViewport):
+                continue
+
+            elements.append(el)
+            locators[el_id] = loc
+
+            if len(elements) >= num_elems:
+                break
+        return elements, locators
+
+    def get_loc_helper(self, element_buffer: Dict[str, Any]) -> Locator:
+        origin_x, orgin_y, center_x, center_y = (
+            element_buffer["origin_x"],
+            element_buffer["origin_y"],
+            element_buffer["center_x"],
+            element_buffer["center_y"],
+        )
+
+        x = origin_x + center_x
+        y = orgin_y + center_y
+
+        loc = self.page.locator(f"pos={x},{y}")
+        loc.position = Position(x, y)
+        return loc
+
+    def element_allowed_fn(self, element: str):
+        return element_allowed_fn(element)
+
+    async def get_locator(self, element: str, element_id: int) -> Locator | ElementOutOfViewport:
+        if not element_allowed_fn(element):
+            return None
+        element_buffer = self.page_element_buffer[element_id]
+        loc = self.get_loc_helper(element_buffer)
+        if await loc.count() <= 0:
+            return _out_of_viewport_element(element_buffer, self.page.viewport_size)
+
+        return loc
 
 
-class DOMSnapshotParser:
+class DOMSnapshotParser(DOMParser):
     cdp_snapshot_kwargs = {
         "computedStyles": ["display"],
         "includeDOMRects": True,
@@ -198,44 +244,6 @@ class DOMSnapshotParser:
         self.page = crawler.page
         self.cdp_client = crawler.cdp_client
         self._current_url = None
-
-    async def _page_sizes(self, page: Page):
-        device_pixel_ratio = await page.evaluate("window.devicePixelRatio")
-        win_scroll_x = await page.evaluate("window.scrollX")
-        win_scroll_y = await page.evaluate("window.scrollY")
-        win_upper_bound = await page.evaluate("window.pageYOffset")
-        win_left_bound = await page.evaluate("window.pageXOffset")
-        win_width = await page.evaluate("window.screen.width")
-        win_height = await page.evaluate("window.screen.height")
-        return (device_pixel_ratio, win_scroll_x, win_scroll_y, win_upper_bound, win_left_bound, win_width, win_height)
-
-    def get_loc_helper(self, element_buffer: Dict[str, Any]) -> Locator:
-        origin_x, orgin_y, center_x, center_y = (
-            element_buffer["origin_x"],
-            element_buffer["origin_y"],
-            element_buffer["center_x"],
-            element_buffer["center_y"],
-        )
-
-        x = origin_x + center_x
-        y = orgin_y + center_y
-
-        loc = self.page.locator(f"pos={x},{y}")
-        loc.position = Position(x, y)
-        return loc
-
-    def element_allowed(self, element: str):
-        return element_allowed(element)
-
-    async def get_locator(self, element: str, element_id: int) -> Locator | ElementOutOfViewport:
-        if not element_allowed(element):
-            return None
-        element_buffer = self.page_element_buffer[element_id]
-        loc = self.get_loc_helper(element_buffer)
-        if await loc.count() <= 0:
-            return _out_of_viewport_element(element_buffer, self.page.viewport_size)
-
-        return loc
 
     def need_crawl(self, page: Page):
         if not isinstance(

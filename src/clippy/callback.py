@@ -54,12 +54,12 @@ class Callback:
         return async_wrapper
 
     @classmethod
-    async def _invoke(self, func_key, *args, **kwargs):
+    async def _invoke(cls, func_key, *args, **kwargs):
         """
         Private method to invoke all callbacks for a given function key.
         """
-        if func_key in self.callbacks:
-            for callback in self.callbacks[func_key]:
+        if func_key in cls.callbacks:
+            for callback in cls.callbacks[func_key]:
                 if asyncio.iscoroutine(resp := callback(*args, **kwargs)):
                     await resp
 

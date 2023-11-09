@@ -11,6 +11,7 @@ import reflex as rx
 from loguru import logger
 
 from clippy.run import Clippy
+from clippy.states import Task
 from clippy.constants import ROOT_DIR, TASKS_DATA_DIR
 from clippy.instructor import NextAction
 
@@ -202,15 +203,16 @@ class TrajState(rx.State):
         self.task = TaskInfo()
 
     def goto_newtask(self):
-        # self.task = TaskInfo()
-        # self.task.objective = self.generate_new_task()
         self.reset_task()
         self.on_load_new_task()
         return self.goto_page("/newtask")
 
-    def on_load_new_task(self) -> None:
+    def check_for_clippy(self) -> None:
         if not self._clippy:
             self._clippy = Clippy()
+
+    def on_load_new_task(self) -> None:
+        self.check_for_clippy()
 
         if not self.task:
             self.task = TaskInfo()
@@ -329,6 +331,7 @@ class TrajState(rx.State):
         """
         This method generates a new task.
         """
+        self.check_for_clippy()
         return self._clippy._get_random_task()
 
     def launch_from_step(self, step_id: str):
@@ -338,30 +341,32 @@ class TrajState(rx.State):
         logger.info(f"should launch from this step {step_id}")
 
     def toggle_running_new_task(self) -> None:
+        self.check_for_clippy()
         yield TrajState.clippy_run_new_task
 
     def toggle_running_new_task_auto(self) -> None:
+        self.check_for_clippy()
         yield TrajState.clippy_run_new_task_auto
 
-    @rx.background
-    async def clippy_run_new_task(self) -> None:
         """
         This method starts a new task in the background.
         """
 
-        async def new_action_callback(action, task):
+    @rx.background
+    async def clippy_run_new_task(self) -> None:
+        async def page_change_callback(task: Task, page, **kwargs):
             async with self:
-                logger.info(f"got action: {action} and task: {task}")
-                # async with self:
-                self.running_actions.append(str(action))
-                self.running_url = task.url
+                self.running_url = page.url
+                _steps = task.steps[-1]
+                _actions = _steps.actions
+                logger.info(f"PAGE-CHANGE: {page.url} | PREVIOUS ACTIONS: {_actions}")
 
         async with self:
+            self._clippy.callback_manager.add_callback(callback=page_change_callback, on=Task.page_change_async)
             self._clippy.objective = self.task.objective
             self._clippy.key_exit = False
             await self._clippy.start_capture()
-            self.task.objective, self.task.id = self._clippy.task.objective, self._clippy.task.id
-            self._clippy.attach_task_callback(new_action_callback)
+            # self.task.id = self._clippy.task.id
 
         # wait for the pause event
         await self._clippy.async_tasks["crawler_pause"]
@@ -387,16 +392,29 @@ class TrajState(rx.State):
         This method ends the clippy browser capture in background from clicking a button or similar
         """
 
-        logger.info("in end_new_task...")
         if self._clippy:
-            logger.info(f"Ending task {self._clippy.objective}")
             # await self._clippy.crawler.playwright_resume()
             await self._clippy.end_capture()
+        logger.info(f"ended task: {self._clippy.objective}")
 
 
 class TaskState(TrajState):
     show_delete: bool = False
     new_running: bool = False
+
+    objective: str = None
+
+    _running_id: str = None
+    _running_url: str = None
+    _running_actions: List[str] = []
+
+    @rx.var
+    def running_url(self):
+        return self._running_url
+
+    @rx.var
+    def running_actions(self):
+        return self._running_actions
 
     def delete_task(self, task_id: str):
         """

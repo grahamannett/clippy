@@ -174,12 +174,12 @@ class Crawler:
         win_height = await self.page.evaluate("window.screen.height")
         return (device_pixel_ratio, win_scroll_x, win_scroll_y, win_upper_bound, win_left_bound, win_width, win_height)
 
-    async def execute_action(self, action: NextAction):
-        _actions = {
-            "type": self.execute_type,
-            "click": self.execute_click,
-        }
-        await _actions[action.action](action)
+    # async def execute_action(self, action: NextAction):
+    #     _actions = {
+    #         "type": self.execute_type,
+    #         "click": self.execute_click,
+    #     }
+    #     await _actions[action.action](action)
 
     async def execute_click(self, action: NextAction, **kwargs):
         loc = action.locator.nth(0)
@@ -196,6 +196,19 @@ class Crawler:
         logger.info("doing enter...")
         # TODO: i should ask for next action after typing from LM, NOT just press enter
         await self.page.keyboard.press("Enter", delay=self.input_delay)
+
+    async def execute_scroll(self, action: NextAction, **kwargs):
+        viewport_height = self.page.viewport_size["height"]
+        logger.info("doing scroll...")
+
+        def direction(_dir: int) -> int:
+            _amt = 0.75  # 3/4ths the page up or down
+            return round(_dir * viewport_height * _amt)
+
+        if action.action == "scrolldown":
+            await self.page.mouse.wheel(delta_x=0, delta_y=direction(1))
+        elif action.action == "scrollup":
+            await self.page.mouse.wheel(delta_x=0, delta_y=direction(-1))
 
     @staticmethod
     def sync_playwright():
