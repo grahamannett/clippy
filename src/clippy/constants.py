@@ -39,6 +39,7 @@ END_EARLY_STR = "==press a key to exit=="
 TEMPLATES_DIR = f"{ROOT_DIR}/src/clippy/templates/"
 
 TASK_BANK_DIR = f"{ROOT_DIR}/src/taskgen/wordbank"
+LLM_TASK_BANK_DIR = f"{ROOT_DIR}/src/taskgen/llm"
 
 # DATABASE RELATED
 MIGRATION_DIR = f"{ROOT_DIR}/data/migrate"

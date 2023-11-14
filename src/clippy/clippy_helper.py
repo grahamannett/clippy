@@ -2,16 +2,17 @@ import asyncio
 from collections import UserDict
 from dataclasses import asdict
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Literal
 
-from loguru import logger
+from clippy import logger
 
 from clippy import constants
 from clippy.callback import Callback
+from clippy.controllers.apis.cohere_controller import CohereController
 from clippy.capture import CaptureAsync
 from clippy.crawler import Crawler, Page
 from clippy.crawler.parser.dom_snapshot import DOMSnapshotParser, element_allowed_fn
-from clippy.dm import DataManager, TaskBankManager
+from clippy.dm import DataManager, TaskBankManager, LLMTaskGenerator
 from clippy.instructor import Instructor, NextAction
 from clippy.states import Action, Step, Task
 from clippy.utils import _device_ratio_check, _get_environ_var, _get_input
@@ -46,6 +47,7 @@ class Clippy:
         data_manager_path: str = f"{constants.ROOT_DIR}/data/tasks",
         database_path: str = f"{constants.ROOT_DIR}/data/db/db.json",
         seed: int | None = None,
+        random_task_from: Literal["llm", "bank"] = "bank",
         **kwargs,
     ) -> None:
         """
@@ -72,6 +74,8 @@ class Clippy:
         self.confirm_actions = confirm_actions
         self.pause_start = pause_start
 
+        self.random_task_from: Literal["llm", "bank"] = random_task_from
+
         self.keep_device_ratio = _device_ratio_check()
 
         self.start_page = start_page
@@ -83,8 +87,10 @@ class Clippy:
         self.database_path = Path(database_path)  # database handles json storage
         self.data_manager = DataManager(self.data_manager_path, self.database_path)
 
-        self.tbm = TaskBankManager(seed=seed)
-        self.tbm.process_task_bank()
+        # TODO: make the task bank manager one instance with 2 interfaces/generators
+        self.tbm = TaskBankManager(seed=seed).setup()
+        self.tbm_llm = LLMTaskGenerator(seed=seed)
+        # self.tbm_llm.setup()
 
     @property
     def page(self) -> Page | None:
@@ -142,11 +148,25 @@ class Clippy:
         return previous_commands
 
     def _get_random_task(self) -> str:
-        task = self.tbm.sample()
-        return task
+        # if self.random_task_from == "llm"
+
+        fn = {"llm": self.tbm_llm.sample_sync, "bank": self.tbm.sample}[self.random_task_from]
+        return fn()
 
     def _check_objective(self, kwargs: dict) -> None:
         # if we set task in kwargs then fetch it from task bank
+        client = CohereController.get_client(client_type="sync")
+        # task_generator = LLMTaskGenerator()
+        # client = CohereController()
+        # loop = asyncio.new_event_loop()
+
+        # t = loop.run_until_complete(task_generator.sample(client))
+
+        # breakpoint()
+        # _task = self.tbm_llm.sample_sync(client=client)
+        self.tbm_llm.setup()
+        _task = self._get_random_task()
+        breakpoint()
 
         if (_task_sample := kwargs.get("task", None)) != None:
             _task_sample = _task_sample if _task_sample >= 0 else None
@@ -159,6 +179,14 @@ class Clippy:
             if self.objective.startswith(("r", "random")):
                 self.objective = self.tbm.sample()
                 logger.info(f"Sampled task: {self.objective}")
+
+    async def _generate_objective(self):
+        if self.random_task_from == "llm":
+            task_generator = LLMTaskGenerator()
+            async with CohereController() as client:
+                self.objective = await task_generator.sample(client)
+        elif self.random_task_from == "bank":
+            self.objective = self._get_random_task()
 
     async def run(self, run_kwargs: dict) -> None:
         try:
@@ -216,7 +244,7 @@ class Clippy:
         return page
 
     async def end_capture(self):
-        await self.crawler.end()
+        await self.crawler.end(task_dir=self.data_manager.curr_task_output)
         self.data_manager.save()
 
     async def run_capture(self, **kwargs):

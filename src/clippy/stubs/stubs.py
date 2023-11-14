@@ -45,3 +45,7 @@ class StubTemplates:
     # headers for prompt
     header_next_action = StubHelper.get_template("header_next_action.jinja")
     header_filter_elements = StubHelper.get_template("header_filter_elements.jinja")
+
+    # task gen
+    task_gen = StubHelper.get_template("task_gen/task_gen.jinja")
+    task_gen_json = StubHelper.get_template("task_gen/task_gen_json.jinja")

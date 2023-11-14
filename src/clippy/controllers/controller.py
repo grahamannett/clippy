@@ -38,16 +38,31 @@ class Controller:
     _n_workers: int = 16
     _return_full: bool = False
 
+    _sync_singleton: "Controller" = False
+    _async_singleton: "Controller" = False
+
     # ---
     client: ClientProtocol
     client_exception: Exception = None
     client_exception_message: str = None
+
+
+    def __new__(cls, *args, **kwargs):
+        if cls._sync_singleton is False:
+            cls._sync_singleton = super().__new__(cls)
+        return cls._sync_singleton
 
     def __init__(self, *args, **kwargs):
         self._check()
 
     def __getattr__(self, name: str):
         return getattr(self.client, name)
+
+    async def __aenter__(self):
+        return await self.client.__aenter__()
+
+    async def __aexit__(self, exc_type, exc_value, traceback):
+        return await self.client.__aexit__(exc_type, exc_value, traceback)
 
     async def end(self):
         return await self.client.close()

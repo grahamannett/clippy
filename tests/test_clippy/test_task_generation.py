@@ -1,7 +1,8 @@
 import unittest
 
 
-from clippy.dm.task_bank import TaskBankManager, Words, _process_word_bank
+from clippy.dm.task_bank import TaskBankManager, Words, _process_word_bank, LLMTaskGenerator
+from clippy.controllers.apis.cohere_controller import CohereController
 
 
 class TestTaskBank(unittest.TestCase):
@@ -17,13 +18,12 @@ class TestTaskBank(unittest.TestCase):
 
     def test_wordbank(self):
         tbm = TaskBankManager()
-        tbm.process_task_bank()
-
+        tbm.setup()
         value = tbm.wordbank.timeslot
 
     def test_examples(self):
         tbm = TaskBankManager()
-        tbm.process_task_bank()
+        tbm.setup()
 
         self.assertTrue(len(tbm) > 5)
 
@@ -35,3 +35,25 @@ class TestTaskBank(unittest.TestCase):
 
             if i > 50:
                 break
+
+
+class TestLLMTaskGen(unittest.IsolatedAsyncioTestCase):
+    async def test_llm_task_gen_with(self):
+        llm_task_generator = LLMTaskGenerator()
+        async with CohereController() as co:
+            generated_task, raw_task = await llm_task_generator.sample(client=co, return_raw_task=True)
+            self.assertTrue("{{" not in generated_task)
+            self.assertTrue(("{{" in raw_task) and ("}}" in raw_task))
+            self.assertTrue(raw_task.split("{{", 1)[0] in generated_task)
+
+    async def test_llm_task_gen(self):
+        llm_task_generator = LLMTaskGenerator("src/taskgen/llm_gen/task_bank")
+        co = CohereController()
+        generated_task, raw_task = await llm_task_generator.sample(client=co, return_raw_task=True)
+        self.assertTrue("{{" not in generated_task)
+        self.assertTrue(("{{" in raw_task) and ("}}" in raw_task))
+        self.assertTrue(raw_task.split("{{", 1)[0] in generated_task)
+        await co.close()
+
+
+#

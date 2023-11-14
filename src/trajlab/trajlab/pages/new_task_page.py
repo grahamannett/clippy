@@ -22,12 +22,15 @@ def new_task():
         rx.box(
             rx.vstack(
                 rx.spacer(),
-                rx.button("Different Task", on_click=TrajState.generate_new_task),
-                rx.button("Start Task", on_click=TrajState.toggle_running_new_task),
-                rx.button("Start auto", on_click=TrajState.toggle_running_new_task_auto),
-                rx.button("End Task", on_click=TrajState.end_new_task),
+                rx.button("different objective", on_click=TrajState.generate_new_task, color_scheme="blackAlpha"),
+                rx.button("start task", on_click=TrajState.toggle_running_new_task),
+                rx.button("start auto", on_click=TrajState.toggle_running_new_task_auto, is_disabled=True),
+                rx.button("end task", on_click=TrajState.end_new_task),
                 rx.divider(border_color="black"),
                 # rx.button("Clippy do task", on_click=TaskState.clippy_do_task),
+                border_radius="20px",
+                border_color="gray",
+                border_width="thick",
             ),
         ),
         rx.vstack(

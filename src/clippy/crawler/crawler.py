@@ -107,14 +107,18 @@ class Crawler:
 
         if hasattr(self, "page"):
             await self.page.close()
+        if hasattr(self, "ctx"):
+            await self.ctx.close()
         if hasattr(self, "browser"):
             await self.browser.close()
         if hasattr(self, "ctx_manager"):
             await self.ctx_manager.__aexit__()
 
-    async def end(self) -> Awaitable[None] | None:
+    async def end(self, task_dir: str = None) -> Awaitable[None] | None:
         if not self.is_async:
             raise Exception("end() can only be called in async mode")
+        await self.end_tracer(task_dir=task_dir)
+
         return await self._end_async()
 
     async def init_without_ctx_manager(self):
@@ -132,6 +136,9 @@ class Crawler:
         self.browser = await self.pw.chromium.launch(headless=self.headless)
         self.ctx = await self.browser.new_context(user_agent=default_user_agent)
 
+        # setup trace
+        await self.start_tracer()
+
         await self.ctx.route("**/*", lambda route: route.continue_())
 
         if inject_preload:
@@ -142,6 +149,14 @@ class Crawler:
 
         self.cdp_client = await self.get_cdp_client()
         return self.page
+
+    async def start_tracer(self):
+        logger.info("starting tracer...")
+        await self.ctx.tracing.start(screenshots=True, snapshots=True, sources=True)
+
+    async def end_tracer(self, task_dir: str = None):
+        trace_output = f"{task_dir}/trace.zip" if task_dir else "taceoutput/trace.zip"
+        await self.ctx.tracing.stop(path=trace_output)
 
     def get_cdp_client(self) -> Awaitable[CDPSession] | CDPSession:
         return self.page.context.new_cdp_session(self.page)

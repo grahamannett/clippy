@@ -1,9 +1,8 @@
 import asyncio
 import json
-from dataclasses import dataclass
 from typing import List, Optional
 
-from loguru import logger
+from clippy import logger
 from playwright.async_api import Locator, Page
 
 from clippy.controllers.apis.cohere_controller import CohereController, Responses
@@ -11,8 +10,6 @@ from clippy.controllers.apis.cohere_controller_utils import Generation, Generati
 from clippy.crawler.parser.dom_snapshot import get_action_type
 from clippy.states import NextAction
 from clippy.stubs.stubs import StubTemplates
-
-action_options = [{"next_command": "click"}, {"next_command": "type"}]
 
 
 def match_generated_output(text: str, elements: List[str]) -> Optional[int]:

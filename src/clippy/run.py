@@ -66,7 +66,8 @@ class ClippyArgs:
     headless: bool = False  # should run without a browser window
     exec_type: str = choice("sync", "async", default="async")  # should run in async or sync mode
     start_page: str = default_start_page
-    random_task: bool = False
+    random_task_from: str = choice("llm", "bank", default="taskbank")  # generate random task from task/word bank
+
     key_exit: bool = True  # should exit on key press
     confirm_actions: bool = False
     task: int = None

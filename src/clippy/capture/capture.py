@@ -28,7 +28,7 @@ class Capture:
         self.start_page = start_page
 
         self.data_manager = data_manager
-        self.ss_match = ScreenshotMatcher() if use_screenshot_matcher else None
+        self.ss_match = ScreenshotMatcher(self.data_manager) if use_screenshot_matcher else None
 
         self.use_llm = use_llm
         self.print_injection = print_injection

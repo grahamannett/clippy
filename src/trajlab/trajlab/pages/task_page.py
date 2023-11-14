@@ -64,7 +64,10 @@ def task_header_card() -> rx.Component:
                 rx.accordion_item(
                     rx.accordion_button(
                         rx.heading(
-                            TrajState.task_status, TrajState.task_status_emoji, color=TrajState.task_status_color
+                            TrajState.task_status,
+                            TrajState.task_status_emoji,
+                            color=TrajState.task_status_color,
+                            size="2xl",
                         ),
                         rx.accordion_icon(),
                     ),
@@ -107,69 +110,73 @@ def task_header_card() -> rx.Component:
     )
 
 
+def task_step_status_buttons(step: TaskStepInfo) -> rx.Component:
+    return rx.container(
+        rx.flex(
+            rx.button(
+                rx.heading("✔️", size="lg"),  # alt-text ✅
+                color="green",
+                color_scheme="green",
+                size="lg",
+                on_click=lambda: TrajState.mock_update_id_status(step.step_id, ApprovalStatus.APPROVED.value),
+            ),
+            rx.spacer(),
+            rx.button(
+                rx.heading("〤", size="lg", color="black"),  # alt-test ❌
+                color_scheme="red",
+                size="lg",
+                on_click=lambda: TrajState.mock_update_id_status(step.step_id, ApprovalStatus.REJECTED.value),
+            ),
+        ),
+    )
+
+
+def action_row(action) -> rx.Component:
+    # return rx.list_item(rx.flex(rx.text("[" + action.action_type + "]"), rx.text("-"), rx.text(action.action_value)))
+    return rx.list_item(action.clean_value)
+
+
 def task_step(step: TaskStepInfo) -> rx.Component:
     return rx.box(
         rx.hstack(
             rx.vstack(
                 # rx.spacer(),
-                rx.heading(f"step: {step.step_idx + 1}"),
+                rx.heading(f"step {step.step_idx + 1}."),
                 rx.hstack(
                     rx.text("url: "),
                     rx.link(step.short_url, href=step.url),
                 ),
                 rx.spacer(),
-                rx.text("id: ", step.short_id),
-                rx.hstack(
-                    rx.button(
-                        rx.heading("Approve", size="sm", color="green"),
-                        # on_click=lambda: TaskState.approve_id(step.step_id),
-                    ),
+                rx.flex(
+                    rx.text("id: " + step.short_id),
                     rx.spacer(),
-                    rx.button(
-                        rx.heading("Reject", size="sm", color="red"),
-                        # on_click=lambda: TaskState.reject_id(step.step_id),
-                    ),
-                    # rx.spacer(),
-                    rx.divider(orientation="vertical", border_color="black"),
-                    # rx.spacer(),
-                    rx.button(
-                        rx.heading("Remove Status", size="sm", color="orange"),
-                        # on_click=lambda: TaskState.remove_id(step.step_id),
-                    ),
+                    rx.button("[reset]", size="sm", color="orange", variant="link"),
                 ),
                 rx.center(
                     # either of these:
                     # - rx.image(src=step.image_path_web, width="500px", height="auto"),
-                    rx.image(src=TrajState.task_step_images[step.step_idx], width="800px", height="auto")
+                    rx.image(src=TrajState.task_step_images[step.step_idx], width="800px", height="auto"),
                 ),
+                task_step_status_buttons(step),
                 rx.spacer(),
-                rx.vstack(
-                    rx.foreach(
-                        step.actions,
-                        lambda action: rx.box(
-                            rx.hstack(
-                                rx.text(f"action-{action.action_idx}"),
-                                # rx.spacer(),
-                                rx.text(action.action_type),
-                                rx.text(action.action_value),
-                            ),
-                            sz="sm",
-                        ),
-                    ),
-                    align_items="left",
-                    # width="30%",
+                rx.container(
+                    rx.ordered_list(
+                        rx.foreach(step.actions, action_row),
+                    )
                 ),
-                rx.link("Goto page", color="darkblue", href=step.url),
-                rx.link(
-                    "Launch Clippy Here",
-                    color="darkblue",
-                    # on_click=lambda: TaskState.launch_from_step(step.step_id),
-                    is_disabled=True,
+                rx.hstack(
+                    rx.link(rx.button("Goto page", variant="outline", size="small"), color="darkblue", href=step.url),
+                    rx.spacer(),
+                    rx.link(
+                        rx.button("Launch Clippy Here", variant="outline", is_disabled=True, size="sm"),
+                        color="darkblue",
+                        is_disabled=True,
+                    ),
                 ),
                 rx.divider(border_color="black"),
                 align_items="left",
             ),
-        )
+        ),
     )
 
 

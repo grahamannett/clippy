@@ -135,7 +135,8 @@ class DataManager:
 
     def dump_task(self, task: Task) -> None:
         task_file = f"{self.curr_task_output}/task.json"
-        json_data = task.dump()
+        cleaned_task = task.cleanup()
+        json_data = cleaned_task.dump()
         with open(task_file, "w") as f:
             json.dump(json_data, f, indent=4)
 

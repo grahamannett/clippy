@@ -1,13 +1,10 @@
 import uuid
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, List, Optional, Tuple
-from functools import wraps
+from typing import List, Optional
 
 
 from playwright.async_api import Frame, Page
-from playwright.sync_api import Frame as FrameSync
-from playwright.sync_api import Page as PageSync
 
 
 from clippy.constants import max_url_length
@@ -380,3 +377,8 @@ class Task(ModelBase):
             prev_step.merge()
 
         return True
+
+    def cleanup(self):
+        for step in self.steps:
+            step.merge()
+        return self

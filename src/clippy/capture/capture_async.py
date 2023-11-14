@@ -1,9 +1,10 @@
 import asyncio
 import json
 
-from loguru import logger
+from clippy import logger
 from playwright.async_api import ConsoleMessage, Page, Request
 
+from clippy import logger
 from clippy.capture.capture import Capture
 from clippy.crawler.crawler import Crawler
 from clippy.crawler.tools_capture import _print_console
@@ -19,8 +20,8 @@ def log_hook(name: str):
 
 
 async def all_console_log(msg: ConsoleMessage):
-    print(f"msg", msg)
-    print(f"msg.args", msg.args)
+    logger.info(f"msg", msg)
+    logger.info(f"msg.args", msg.args)
 
 
 async def catch_console_injections(msg: ConsoleMessage, print_injection: bool = True) -> Action:

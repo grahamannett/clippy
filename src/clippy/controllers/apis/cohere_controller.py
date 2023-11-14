@@ -1,8 +1,9 @@
 from os import environ
-from typing import Coroutine, Dict, List, Type
+from typing import Coroutine, Dict, List, Literal, Type
 
 import cohere
 
+from clippy import logger
 from clippy.controllers.apis.cohere_controller_utils import Embeddings, Generations
 from clippy.controllers.controller import Controller
 from clippy.controllers.utils import allow_full_response
@@ -46,11 +47,18 @@ class CohereController(Controller):
         self.client = client or CohereController.get_client()
 
     @staticmethod
-    def get_client(api_key: str = None, check_api_key: bool = True) -> cohere.AsyncClient:
+    def get_client(
+        api_key: str = None, check_api_key: bool = True, client_type: Literal["async", "sync"] = "sync"
+    ) -> cohere.AsyncClient | cohere.Client:
         """
         Get the Cohere client.
         """
-        return cohere.AsyncClient(api_key=api_key or environ.get("COHERE_KEY"), check_api_key=check_api_key)
+
+        if client_type == "sync":
+            logger.warn("USING SYNC LLM Client")
+
+        ClientCls = {"async": cohere.AsyncClient, "sync": cohere.Client}[client_type]
+        return ClientCls(api_key=api_key or environ.get("COHERE_KEY"), check_api_key=check_api_key)
 
     @allow_full_response(lambda resp: resp.tokens)
     async def tokenize(self, text, model: str = config.model):

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from typing import Any, Awaitable, List, Optional, Type
 
-from playwright.async_api import Page, Locator
-
-# NOTE: Using camelCase so it matches more closely with js
+from playwright.async_api import Locator, Page
 
 
 # these are dataclasses rather than named tuple so I can attach objects to them
@@ -45,9 +44,11 @@ class ActionMetadata:
     """
 
     action_type: str = field(default=None, repr=False)
+    timestamp: str = field(default=None, repr=False)
 
     def __post_init__(self):
         self.action_type = self.__class__.__name__.lower()
+        self.timestamp = str(datetime.now())
 
 
 class Action:

@@ -92,6 +92,8 @@ class StepActionInfo(rx.Base):
     action_type: str
     action_value: str
 
+    clean_value: str = None
+
 
 class TaskStepInfo(rx.Base):
     step_idx: int
@@ -218,7 +220,7 @@ class TrajState(rx.State):
             self.task = TaskInfo()
 
         if not self.task.objective:
-            self.task.objective = self.generate_new_task()
+            self.generate_new_task()
             logger.info(f"made new task with objective: {self.task.objective}")
 
     def load_task(self, folder_id: str):
@@ -254,15 +256,21 @@ class TrajState(rx.State):
                 action_value = "unknown"
                 if action_type := action.get("action_type"):
                     if action_type == "click":
-                        action_value = f"{action['x']},{action['y']}"
+                        action_value = f"pos({action['x']},{action['y']})"
+                        clean_value = "click @ " + action_value
                     elif action_type in ["type", "enter"]:
                         action_value = action["value"]
+                        clean_value = "press enter"
+                    elif action_type in ["input"]:
+                        action_value = f'"{action["value"]}"'
+                        clean_value = "type " + action_value
 
                     step_state.actions.append(
                         StepActionInfo(
                             action_idx=action_idx,
                             action_type=action_type,
                             action_value=action_value,
+                            clean_value=clean_value,
                         )
                     )
                 else:
@@ -292,6 +300,9 @@ class TrajState(rx.State):
 
     def reload_database(self) -> None:
         db_interface.reload_database()
+
+    def mock_update_id_status(self, id: str, value: str) -> None:
+        logger.info(f"mock update id status: {id} {value}")
 
     def update_id_status(self, id: str, value: str) -> None:
         db_interface.update_id_status(id, value)
@@ -327,12 +338,12 @@ class TrajState(rx.State):
         logger.info(f"All tasks data saved to {tar_file_name}")
         yield rx.download(f"/{tar_file_name}", filename=tar_file_name)
 
-    def generate_new_task(self) -> str:
+    def generate_new_task(self) -> None:
         """
         This method generates a new task.
         """
         self.check_for_clippy()
-        return self._clippy._get_random_task()
+        self.task.objective = self._clippy._get_random_task()
 
     def launch_from_step(self, step_id: str):
         """
