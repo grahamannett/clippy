@@ -2,18 +2,25 @@ import asyncio
 import re
 import shutil
 import unittest
-from pathlib import Path
-from unittest.mock import AsyncMock, patch
+import random
 
-from loguru import logger
 from playwright.async_api import expect
 
+from clippy import logger
 from clippy.run import Clippy
 from tests.fixtures.fixture_cases import HNTestCase
 
 
-class TestCapture(unittest.IsolatedAsyncioTestCase):
+class BaseClippyTester(unittest.IsolatedAsyncioTestCase):
+    @property
+    def delay(self):
+        return random.randint(*self.delay_range)
+
     def setUp(self):
+        # random delay for
+        self.delay_range = (100, 300)
+        self.timeout = 10000
+
         objective, start_page, test_task_output_dir = HNTestCase
         shutil.rmtree(test_task_output_dir, ignore_errors=True)
         self.clippy = Clippy(
@@ -23,7 +30,6 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
             data_dir=test_task_output_dir,
             key_exit=False,
         )
-        self.delay = 100
         return super().setUp()
 
     async def asyncTearDown(self):
@@ -33,6 +39,15 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
             except:
                 pass
 
+
+class TestClippy(BaseClippyTester):
+    def test_property(self):
+        clippy = self.clippy
+        task = clippy.task
+        assert task is None
+
+
+class TestCapturePlaywright(BaseClippyTester):
     async def test_capture_playwright(self):
         clippy, start_page = self.clippy, HNTestCase.start_page
 
@@ -62,6 +77,8 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
         await clippy.wait_until("screenshot_event")
         assert len(clippy.capture.captured_screenshot_ids) == 4
 
+
+class TestCapture(BaseClippyTester):
     async def test_capture_clippy(self):
         clippy = self.clippy
         clippy.headless = False
@@ -90,9 +107,11 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
         assert action.action == "type"
 
         await clippy.use_action(action)
-        await expect(page).to_have_title("body wash - Google Search")
+
+        # need regex as title can be various `body wash amazon - Google Search` and `body wash - Google Search`
+        title_regex = re.compile(r"(?=.*body wash)(?=.*Google Search)")
+        await expect(page).to_have_title(title_regex)
         await clippy.wait_until("screenshot_event")
-        # breakpoint()
 
         # HERE we should find an element in the page
         action = await clippy.suggest_action()
@@ -103,7 +122,7 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
         clippy.start_page = "https://google.com"
         clippy.headless = False
         page = await clippy.start_capture()
-        # breakpoint()
+
         await page.wait_for_load_state("domcontentloaded")
         locator = page.get_by_label("Search", exact=True)
         await locator.click()
@@ -129,8 +148,5 @@ class TestCapture(unittest.IsolatedAsyncioTestCase):
 
         page = await clippy.start_capture(goto_start_page=True)
         action = await clippy.suggest_action(previous_commands=["type input 9 body wash"])
-
-
-class TestClippy(unittest.IsolatedAsyncioTestCase):
-    def test_get_previous_actions(self):
-        pass
+        await clippy.use_action(action)
+        await page.pause()

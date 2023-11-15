@@ -4,11 +4,10 @@ import shutil
 from asyncio import iscoroutine
 from pathlib import Path
 
-from loguru import logger
-
+from clippy import logger
+from clippy.constants import MIGRATION_DIR
 from clippy.dm.data_manager_utils import confirm_override
 from clippy.dm.db_utils import Database
-from clippy.constants import MIGRATION_DIR
 from clippy.states import Task
 
 
@@ -55,6 +54,9 @@ class DataManager:
 
     @property
     def task(self) -> Task:
+        if not self.tasks:
+            return None
+
         return self.tasks[-1]
 
     @property
@@ -106,6 +108,7 @@ class DataManager:
             )
 
     def load(self):
+        """load all tasks from task_data_dir"""
         for folder in os.listdir(self.task_data_dir):
             try:
                 task = self.read_folder(folder)
@@ -151,7 +154,7 @@ class DataManager:
         if isinstance(self.db, Database):
             self.db.save_dataclass(task)
 
-    def get_folder(self, task: Task):
+    def get_folder(self, task: Task) -> Path:
         """need some generic way to get the folder so make it a func for now
         possible i want to save tasks in a different way later maybe shorter uuid
         """

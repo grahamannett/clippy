@@ -1,5 +1,5 @@
 from os import environ
-from typing import Coroutine, Dict, List, Literal, Type
+from typing import Callable, Coroutine, Dict, List, Literal, Type
 
 import cohere
 
@@ -37,6 +37,11 @@ class CohereController(Controller):
     client_exception: Type[cohere.error.CohereError] = cohere.error.CohereError
     client_exception_message: str = "Cohere fucked up: {0}"
 
+    ClientCls: Dict[str, Callable] = {
+        "async": cohere.AsyncClient,
+        "sync": cohere.Client,
+    }
+
     _is_async: bool = True
 
     def __init__(self, client: cohere.AsyncClient = None, *args, **kwargs):
@@ -46,22 +51,25 @@ class CohereController(Controller):
         super().__init__(*args, **kwargs)
         self.client = client or CohereController.get_client()
 
-    @staticmethod
+    @classmethod
     def get_client(
-        api_key: str = None, check_api_key: bool = True, client_type: Literal["async", "sync"] = "sync"
+        cls, api_key: str = None, check_api_key: bool = True, client_type: Literal["async", "sync"] = "async"
     ) -> cohere.AsyncClient | cohere.Client:
         """
         Get the Cohere client.
         """
-
         if client_type == "sync":
             logger.warn("USING SYNC LLM Client")
 
-        ClientCls = {"async": cohere.AsyncClient, "sync": cohere.Client}[client_type]
-        return ClientCls(api_key=api_key or environ.get("COHERE_KEY"), check_api_key=check_api_key)
+        ClientCls = cls.ClientCls[client_type]
+        api_key = api_key or environ.get("COHERE_KEY")
+        return ClientCls(api_key=api_key, check_api_key=check_api_key)
 
     @allow_full_response(lambda resp: resp.tokens)
     async def tokenize(self, text, model: str = config.model):
+        """
+        Tokenize the given text.
+        """
         return await self.client.tokenize(text, model=model)
 
     @Database.database_api_calls
@@ -85,33 +93,35 @@ class CohereController(Controller):
         prompt: str = None,
         model: str = config.model,
         temperature: float = 0.5,
+        k: int = 0,
         num_generations: int = None,
         max_tokens: int = 20,
         stop_sequences: List[str] = None,
         return_likelihoods: str = "GENERATION",
         truncate: str = "NONE",  # must be one of NONE/START/END
         stream: bool = False,
-        # **kwargs,
+        **kwargs,
     ) -> Generations:
         """
         Generate text using the Cohere API.
-        """
         # https://docs.cohere.com/reference/generate
-
+        """
         response = await self.client.generate(
             prompt=prompt,
             model=model,
             temperature=temperature,
+            k=k,
             num_generations=num_generations,
             max_tokens=max_tokens,
             stop_sequences=stop_sequences,
             return_likelihoods=return_likelihoods,
             truncate=truncate,
             stream=stream,
-            # **kwargs,
+            **kwargs,
         )
-        response = Generations.from_response(response)
-        return response
+
+        gen_response = Generations.from_response(response)
+        return gen_response
 
     async def close(self) -> Coroutine:
         """

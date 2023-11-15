@@ -3,12 +3,11 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Optional
 
-
 from playwright.async_api import Frame, Page
 
-
-from clippy.constants import max_url_length
+from clippy import logger
 from clippy.callback import Callback
+from clippy.constants import max_url_length
 from clippy.states.actions import Action, Actions
 from clippy.states.base import ModelBase
 
@@ -90,9 +89,17 @@ class Step(ModelBase):
         step = cls(**data)
 
         for action_dict in actions:
-            ActType = Actions[action_dict.pop("type")]
-            action = ActType(**action_dict)
-            step.actions.append(action)
+            try:
+                if "action_type" in action_dict:
+                    ActType = Actions[action_dict.pop("action_type")]
+                else:
+                    ActType = Actions[action_dict.pop("action")]
+                action = ActType(**action_dict)
+                step.actions.append(action)
+            except Exception as e:
+                logger.error(f"Error creating action from dict: {e}")
+                breakpoint()
+
         return step
 
     @property
@@ -235,6 +242,7 @@ class Task(ModelBase):
                 continue
 
             task.steps.append(step)
+
         return task
 
     @classmethod

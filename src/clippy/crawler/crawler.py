@@ -1,18 +1,17 @@
-from __future__ import annotations
-
 import asyncio
 import sys
 from typing import Awaitable, Callable, Sequence
 
-from loguru import logger
 from playwright.async_api import Browser, BrowserContext, CDPSession, Page, PlaywrightContextManager
 
+from clippy import logger
+from clippy.clippy_base import ClippyBase
 from clippy.constants import (
+    END_EARLY_STR,
     default_preload_injection_script,
     default_user_agent,
     default_viewport_size,
     input_delay,
-    END_EARLY_STR,
 )
 from clippy.crawler.selectors import Selector
 from clippy.states.actions import NextAction
@@ -38,18 +37,30 @@ class Crawler:
         self,
         is_async: bool = True,
         headless: bool = False,
-        clippy: Clippy = None,
+        clippy: ClippyBase = None,
+        save_trace: bool = False,
     ) -> None:
         self._started = False
         self.is_async = is_async
         self.headless = headless
         self.clippy = clippy
+        self.save_trace = save_trace
+        self._trace_running = False
 
         if self.clippy:
             self.async_tasks = self.clippy.async_tasks
             self.async_tasks["crawler_pause"] = None
 
-    async def __aenter__(self) -> Crawler:
+    @property
+    def actions(self) -> dict[str, Callable]:
+        return {
+            "type": self.execute_type,
+            "click": self.execute_click,
+            "scrolldown": self.execute_scroll,
+            "scrollup": self.execute_scroll,
+        }
+
+    async def __aenter__(self) -> "Crawler":
         await self.start()
         return self
 
@@ -104,7 +115,6 @@ class Crawler:
         # close cdp client before page
         if hasattr(self, "cdp_client"):
             await self.cdp_client.detach()
-
         if hasattr(self, "page"):
             await self.page.close()
         if hasattr(self, "ctx"):
@@ -152,11 +162,15 @@ class Crawler:
 
     async def start_tracer(self):
         logger.info("starting tracer...")
-        await self.ctx.tracing.start(screenshots=True, snapshots=True, sources=True)
+        if self.save_trace:
+            self._trace_running = True
+            await self.ctx.tracing.start(screenshots=True, snapshots=True, sources=True)
 
     async def end_tracer(self, task_dir: str = None):
-        trace_output = f"{task_dir}/trace.zip" if task_dir else "taceoutput/trace.zip"
-        await self.ctx.tracing.stop(path=trace_output)
+        if self.save_trace and self._trace_running:
+            trace_output = f"{task_dir}/trace.zip" if task_dir else "taceoutput/trace.zip"
+            await self.ctx.tracing.stop(path=trace_output)
+            self._trace_running = False
 
     def get_cdp_client(self) -> Awaitable[CDPSession] | CDPSession:
         return self.page.context.new_cdp_session(self.page)
@@ -229,10 +243,3 @@ class Crawler:
             await self.page.mouse.wheel(delta_x=0, delta_y=direction(1))
         elif action.action == "scrollup":
             await self.page.mouse.wheel(delta_x=0, delta_y=direction(-1))
-
-    actions = {
-        "type": execute_type,
-        "click": execute_click,
-        "scrolldown": execute_scroll,
-        "scrollup": execute_scroll,
-    }

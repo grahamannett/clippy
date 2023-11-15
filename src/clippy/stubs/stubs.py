@@ -1,4 +1,5 @@
 from os import environ
+from pathlib import Path
 from typing import Any, Dict, List
 
 from jinja2 import Environment, FileSystemLoader, Template
@@ -36,16 +37,27 @@ class StubHelper:
 
 class StubTemplates:
     Template = Template
-    examples_prompt = StubHelper.get_template("examples_prompt.jinja")
-    state = StubHelper.get_template("state.jinja")
-    transform_generation = StubHelper.get_template("transform_generation.jinja")
 
-    # prompt is main template
-    prompt = StubHelper.get_template("prompt.jinja")
-    # headers for prompt
-    header_next_action = StubHelper.get_template("header_next_action.jinja")
-    header_filter_elements = StubHelper.get_template("header_filter_elements.jinja")
+    @classmethod
+    def setup_template(cls, template_path: str, template_name: str = None):
+        # alternative is to use
+        # template_name = StubHelper.get_template(template_path)
+        # e.g.
+        # `state = StubHelper.get_template("state.jinja")`
+        template_name = template_name or Path(template_path).stem
+        setattr(cls, template_name, StubHelper.get_template(template_path))
 
-    # task gen
-    task_gen = StubHelper.get_template("task_gen/task_gen.jinja")
-    task_gen_json = StubHelper.get_template("task_gen/task_gen_json.jinja")
+
+StubTemplates.setup_template("examples_prompt.jinja")
+StubTemplates.setup_template("state.jinja")
+StubTemplates.setup_template("transform_generation.jinja")
+
+# prompt is main template
+StubTemplates.setup_template("prompt.jinja")
+# headers for prompt
+StubTemplates.setup_template("header_next_action.jinja")
+StubTemplates.setup_template("header_filter_elements.jinja")
+
+# task gen
+StubTemplates.setup_template("task_gen/task_gen_json.jinja")
+StubTemplates.setup_template("task_gen/task_gen.jinja")

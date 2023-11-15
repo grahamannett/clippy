@@ -128,13 +128,19 @@ class Action:
 
 
 @dataclass
-class Position(ActionMetadata):
+class Position:
     """
     A class to represent a position with x and y coordinates.
     """
 
     x: int | float = None  # x-coordinate
     y: int | float = None  # y-coordinate
+
+
+class PositionInterface:
+    @property
+    def position(self) -> Position:
+        return Position(self.x, self.y)
 
 
 @dataclass
@@ -197,7 +203,7 @@ class BoundingBox(ActionMetadata):
 
 
 @dataclass
-class Click(ActionMetadata, Action):
+class Click(PositionInterface, ActionMetadata, Action):
     """
     A class to represent a click action.
     """
@@ -213,7 +219,6 @@ class Click(ActionMetadata, Action):
         Method called after initialization of the Click instance.
         """
         super().__post_init__()
-        self.position = Position(self.x, self.y)
 
         if self.bounding_box:
             if isinstance(self.bounding_box, str):
@@ -279,7 +284,7 @@ class Click(ActionMetadata, Action):
 
 
 @dataclass
-class Input(ActionMetadata, Action):
+class Input(PositionInterface, ActionMetadata, Action):
     """
     A class to represent an input action.
     """
@@ -293,7 +298,6 @@ class Input(ActionMetadata, Action):
         Method called after initialization of the Input instance.
         """
         super().__post_init__()
-        self.position = Position(self.x, self.y)
         self.allow_merge = True
 
     def format_for_llm(self, **kwargs) -> str:
@@ -388,13 +392,13 @@ class Actions(Action):
     It may be useful in the future, but is kept out for now.
     """
 
-    Click: Type[Click] = Click  # Type hint for Click action
-    Input: Type[Input] = Input  # Type hint for Input action
-    Enter: Type[Enter] = Enter  # Type hint for Enter action
-    Wheel: Type[Wheel] = Wheel  # Type hint for Wheel action
+    click: Type[Click] = Click  # Type hint for Click action
+    input: Type[Input] = Input  # Type hint for Input action
+    enter: Type[Enter] = Enter  # Type hint for Enter action
+    wheel: Type[Wheel] = Wheel  # Type hint for Wheel action
 
     # to allow Actions.Action for type hinting/isinstance
-    Action: Type[Action] = Action  # Type hint for Action
+    action: Type[Action] = Action  # Type hint for Action
 
     def __new__(cls, action_type: str, *args, **kwargs) -> Action:
         return cls.__dict__[action_type](*args, **kwargs)

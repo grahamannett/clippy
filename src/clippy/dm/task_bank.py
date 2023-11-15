@@ -70,7 +70,7 @@ class LLMTaskGenerator:
     def __init__(self, task_bank_dir: str = LLM_TASK_BANK_DIR, client: "Controller" = None, seed: int = None) -> None:
         self.task_templates_file = Path(task_bank_dir) / "task_bank"
         self._seed = seed
-        self.client = client
+        self._sync_client = client
 
         self.task_templates = []
 
@@ -82,10 +82,15 @@ class LLMTaskGenerator:
         text = text.lstrip(" ")
         return text
 
-    def setup(self):
-        from clippy.controllers.apis.cohere_controller import CohereController
+    def setup(self, sync_client: "Controller" = None):
+        if sync_client is None:
+            from clippy.controllers.apis.cohere_controller import \
+                CohereController
 
-        self.client = self.client or CohereController.get_client(client_type="sync")
+            sync_client = CohereController.get_client(client_type="sync")
+
+        self._sync_client = sync_client
+
         return self
 
     def get_prompt(self) -> tuple[str, str]:
@@ -101,7 +106,7 @@ class LLMTaskGenerator:
         generate_kwargs: dict[str, Any] = {},
         return_raw_task: bool = False,
     ) -> str:
-        client = client or self.client
+        client = client or self._sync_client
         prompt, raw_task = self.get_prompt()
         response = client.generate(
             prompt=prompt,

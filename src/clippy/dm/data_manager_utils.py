@@ -1,6 +1,5 @@
-from loguru import logger
+from clippy import logger
 from clippy.utils.input_utils import _get_input
-
 
 
 def confirm_override(func):

@@ -36,47 +36,8 @@ class Instructor:
         """Ends the language model controller, ignoring any exceptions."""
         try:
             await self.lm_controller.end()
-        except Exception:
-            pass
-
-    async def score_actions(
-        self,
-        elements: List[str],
-        objective: str,
-        url: str,
-        previous_commands: List[str] = None,
-        locators: List[Locator] = [],
-    ) -> List[NextAction]:
-        """Scores all page elements against the current objective.
-
-        Args:
-            objective (str): Current objective.
-            elements (List[str]): Page elements to score.
-            url (str): Current URL.
-            previous_commands (List[str], optional): Previous commands. Defaults to None.
-            locators (List[Locator], optional): Locators for the elements. Defaults to [].
-
-        Returns:
-            List[NextAction]: List of scored actions.
-        """
-        state = StubTemplates.state.render(
-            objective=objective,
-            url=url,
-            browser_content=elements,
-            previous_commands=previous_commands,
-        )
-
-        async def score_element(element: str, index: int) -> NextAction:
-            action_type = get_action_type(element)
-            next_command = f"{action_type} - {element}"
-            prompt = StubTemplates.prompt.render(state=state, next_command=next_command)
-            score = await self.lm_controller.generate(prompt=prompt, max_tokens=0, return_likelihoods="ALL")
-            action = NextAction(action=action_type, score=score[0].likelihood, action_args=element)
-            if locators:
-                action.locator = locators[index]
-            return action
-
-        return await asyncio.gather(*[score_element(element, index) for index, element in enumerate(elements)])
+        except Exception as err:
+            logger.error(f"Error ending language model controller: {err}")
 
     async def generate_next_action(
         self,
@@ -99,13 +60,14 @@ class Instructor:
             previous_commands=previous_commands,
         )
 
-        return await self.lm_controller.generate(
+        response: Generations = await self.lm_controller.generate(
             prompt=prompt,
             max_tokens=max_tokens,
             num_generations=num_generations,
             return_likelihoods=return_likelihoods,
             temperature=temperature,
         )
+        return response
 
     async def filter_actions(
         self,
@@ -181,7 +143,8 @@ class Instructor:
         # Attempt to get a valid response
         for resp in response:
             try:
-                # Expected format: {"action": "type", "element_id": 9, "element_metadata": null, "action_args": "buy bodywash"}
+                # Expected format will be similar to:
+                # {"action": "type", "element_id": 9, "element_metadata": null, "action_args": "buy bodywash"}
                 resp_dict = json.loads(resp.text)
 
                 next_action = NextAction(
@@ -193,7 +156,7 @@ class Instructor:
                 )
 
                 if resp_dict:
-                    logger.warning("Response has more keys than expected")
+                    logger.warn("Response has more keys than expected")
                     next_action.extra = resp_dict
 
                 next_action.response = resp
@@ -205,6 +168,45 @@ class Instructor:
         if next_action is None:
             raise ValueError("Unable to transform generated action into a valid action")
         return next_action
+
+    async def score_actions(
+        self,
+        elements: List[str],
+        objective: str,
+        url: str,
+        previous_commands: List[str] = None,
+        locators: List[Locator] = [],
+    ) -> List[NextAction]:
+        """Scores all page elements against the current objective.
+
+        Args:
+            objective (str): Current objective.
+            elements (List[str]): Page elements to score.
+            url (str): Current URL.
+            previous_commands (List[str], optional): Previous commands. Defaults to None.
+            locators (List[Locator], optional): Locators for the elements. Defaults to [].
+
+        Returns:
+            List[NextAction]: List of scored actions.
+        """
+        state = StubTemplates.state.render(
+            objective=objective,
+            url=url,
+            browser_content=elements,
+            previous_commands=previous_commands,
+        )
+
+        async def score_element(element: str, index: int) -> NextAction:
+            action_type = get_action_type(element)
+            next_command = f"{action_type} - {element}"
+            prompt = StubTemplates.prompt.render(state=state, next_command=next_command)
+            score = await self.lm_controller.generate(prompt=prompt, max_tokens=0, return_likelihoods="ALL")
+            action = NextAction(action=action_type, score=score[0].likelihood, action_args=element)
+            if locators:
+                action.locator = locators[index]
+            return action
+
+        return await asyncio.gather(*[score_element(element, index) for index, element in enumerate(elements)])
 
     async def _find_action_from_elems(self, elems: List[str], locators: List[str]):
         scored = await self.score_actions(

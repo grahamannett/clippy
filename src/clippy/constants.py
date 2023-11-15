@@ -25,12 +25,16 @@ default_user_agent = (
 )
 default_viewport_size = {"width": 1280, "height": 1080}
 
-# input delay is delay betweeen each keypress/click.  ideally this should be more `random`
-input_delay = 100  # ms
+# input delay is delay betweeen each keypress/click.  this value is used from _random_delay
+input_delay: int = 100  # ms
 # action delay is the delay after executing an action to the next thing we do.
 # for instance if we click a button and the page then shows a new modal that we input
 #  into but url does not change ideally this should be more `random`
-action_delay = 1  # seconds
+action_delay: float = 0.5  # seconds
+
+# related to matching on user input (e.g. allow user to type `r` or `random` to match random word)
+RANDOM_WORD_MATCH = ["random", "r"]
+
 
 # STRING PRINTED TO CONSOLE WHEN KEY EXIT
 END_EARLY_STR = "==press a key to exit=="

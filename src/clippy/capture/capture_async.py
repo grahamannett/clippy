@@ -41,7 +41,9 @@ async def catch_console_injections(msg: ConsoleMessage, print_injection: bool = 
     catch_flag, class_name, data = values  # data is list of [CATCH, class_name, *data]
     data = json.loads(data)
 
+    class_name = class_name.lower()
     action = Actions[class_name](**data)
+
     return action
 
 
@@ -50,14 +52,12 @@ class CaptureAsync(Capture):
         self,
         start_page: str = None,
         data_manager: DataManager = None,
-        use_llm: bool = False,
         *args,
         **kwargs,
     ) -> None:
         super().__init__(
             start_page=start_page,
             data_manager=data_manager,
-            use_llm=use_llm,
             *args,
             **kwargs,
         )
@@ -92,11 +92,11 @@ class CaptureAsync(Capture):
         self.async_tasks["screenshot_event"].set()
         logger.info(f"screenshot taken for {page.url[:50]}...")
 
-    async def hook_console(self, msg: ConsoleMessage):
+    async def hook_console(self, msg: ConsoleMessage) -> None:
         try:
             action = await catch_console_injections(msg, print_injection=self.print_injection)
-        except Exception as e:
-            logger.error(f"Error catching msg: {msg}")
+        except Exception as err:
+            logger.error(f"Error catching msg: `{msg}` with error: `{err}`")
             action = None
 
         if action:

@@ -3,13 +3,13 @@ from dataclasses import dataclass
 from os import environ
 from typing import Optional, Union
 
-from simple_parsing import ArgumentParser, choice
+from simple_parsing import ArgumentParser, choice, subparsers
 
 from clippy.clippy_helper import Clippy
 from clippy.constants import default_objective, default_start_page
 
 
-def check_startup() -> None:
+def _check_startup() -> None:
     """checks for api key.  if other keys/values should be set"""
     # TODO: check for device ratio issue.
     api_key = environ.get("COHERE_KEY")
@@ -58,7 +58,15 @@ class DataManager:
 class ClippyArgs:
     """class docstring"""
 
-    command: Union[Assist, Capture, Replay, DataManager]
+    command: Union[Assist, Capture, Replay, DataManager] = subparsers(
+        {
+            "assist": Assist,
+            "capture": Capture,
+            "replay": Replay,
+            "datamanager": DataManager,
+        },
+        default=Capture,
+    )
 
     objective: str = default_objective
     seed: int = None
@@ -66,31 +74,41 @@ class ClippyArgs:
     headless: bool = False  # should run without a browser window
     exec_type: str = choice("sync", "async", default="async")  # should run in async or sync mode
     start_page: str = default_start_page
-    random_task_from: str = choice("llm", "bank", default="taskbank")  # generate random task from task/word bank
+    task_gen_from: str = choice("llm", "taskbank", default="taskbank")  # generate random task from task/word bank
 
     key_exit: bool = True  # should exit on key press
     confirm_actions: bool = False
-    task: int = None
+    task_id: int | str = None
 
     def __post_init__(self):
         self.cmd = self.command.__class__.__name__.lower()
 
 
-def get_args():
+def get_args(to_dict: bool = False) -> ClippyArgs | dict[str, str | bool | int | None]:
     parser = ArgumentParser()
     parser.add_arguments(ClippyArgs, dest="clippy_args")
     args = parser.parse_args()
 
-    return args.clippy_args
+    clippy_args: ClippyArgs = args.clippy_args
+
+    if to_dict:
+        return vars(clippy_args)
+    return clippy_args
 
 
-def setup_run() -> tuple[Clippy, dict[str, str | bool | int | None]]:
-    check_startup()
+def setup_run(
+    check_startup: bool = True,
+    check_command: bool = True,
+) -> tuple[Clippy, dict[str, str | bool | int | None]]:
+    if check_startup:
+        _check_startup()
 
     clippy_args = get_args()
     kwargs = vars(clippy_args)
     clippy = Clippy(**kwargs)
-    clippy.check_command(**kwargs)
+    if check_command:
+        clippy.check_command(**kwargs)
+
     return clippy, kwargs
 
 
