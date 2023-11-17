@@ -1,8 +1,7 @@
 import unittest
 
-
-from clippy.dm.task_bank import TaskBankManager, Words, _process_word_bank, LLMTaskGenerator
 from clippy.controllers.apis.cohere_controller import CohereController
+from clippy.dm.task_bank import LLMTaskGenerator, TaskBankManager, Words, _process_word_bank
 
 
 class TestTaskBank(unittest.TestCase):
@@ -47,7 +46,7 @@ class TestLLMTaskGen(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(raw_task.split("{{", 1)[0] in generated_task)
 
     async def test_llm_task_gen(self):
-        llm_task_generator = LLMTaskGenerator("src/taskgen/llm_gen/task_bank")
+        llm_task_generator = LLMTaskGenerator("src/taskgen/llm")
         co = CohereController()
         generated_task, raw_task = await llm_task_generator.sample(client=co, return_raw_task=True)
         self.assertTrue("{{" not in generated_task)

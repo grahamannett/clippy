@@ -3,8 +3,8 @@ Present state:
   Page Title: {{ title }}
   Page URL: {{ url }}
 ---
-Current Browser Content: {% if browser_content %}{% for line in browser_content %}
-{{ element_prefix }}{{ line }}{% endfor %}{% else %}None{% endif %}
+Current Browser Content:{% if browser_content %}{% for line in browser_content %}
+{{ element_prefix }}{{ line }}{% endfor %}{% else %} None{% endif %}
 ---
-Previous actions: {% if previous_commands %}{% for cmd in previous_commands %}
-{{ action_prefix }}{{ cmd }}{% endfor %}{% else %}None{% endif %}
+Previous actions:{% if previous_commands %}{% for cmd in previous_commands %}
+{{ action_prefix }}{{ cmd }}{% endfor %}{% else %} None{% endif %}

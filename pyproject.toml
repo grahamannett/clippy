@@ -35,13 +35,10 @@ server = { shell = "cd src/trajlab && reflex run" }
 
 [tool.pdm.dev-dependencies]
 test = ["pytest>=7.4.1"]
-dev = [
-    "-e file:///${PROJECT_ROOT}/src/trajlab#egg=trajlab",
-]
+dev = ["-e file:///${PROJECT_ROOT}/src/trajlab#egg=trajlab"]
 
 [tool.pytest.ini_options]
 # ignore warnings not from clippy
 filterwarnings = ["ignore", "default:::clippy"]
 pythonpaths = ["src", "tests"]
 # testpaths = ["tests/"]
-

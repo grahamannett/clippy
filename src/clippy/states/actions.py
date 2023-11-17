@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from typing import Any, Awaitable, List, Optional, Type
+from typing import Any, Awaitable, List, Literal, Optional, Type
 
 from playwright.async_api import Locator, Page
 
@@ -418,3 +418,19 @@ class Actions(Action):
             The class of the specified action.
         """
         return cls.__dict__[class_name]
+
+    @staticmethod
+    def actions_for_templates(
+        use_keys: List[str] | Literal["all"] = ["click", "type", "done"],  # default keys skip scroll
+    ) -> List[str]:
+        # maybe put these on the Action class and use field(init=False, repr=False)
+        act_strs = {
+            "click": "click [button X METADATA] (click on the element with id X and METADATA)",
+            "type": "type [element X METADATA] [text] (type text into the element with id X and METADATA)",
+            "scroll": "scroll [DIRECTION] (scroll down/up the page)",
+            "done": "done (objective has been completed at this current state)",
+        }
+        if use_keys == "all":
+            return list(act_strs.values())
+
+        return [act_strs[key] for key in use_keys]

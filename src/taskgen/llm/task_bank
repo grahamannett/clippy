@@ -1,4 +1,4 @@
-Search for a reliable contractor (plumber, electrician, etc.) in my area.
+Search for a reliable contractor for {{ wordbank.contractor_jobs }} in my area.
 Find the contact information for my local government representative in {{ wordbank.city }}.
 Look up nutritional information for {{ wordbank.food }}.
 Find reviews for a specific model of {{ wordbank.electronic }}.
@@ -6,21 +6,21 @@ Calculate my monthly mortgage payment based on a {{ wordbank.loan_amount }}-year
 Plan a road trip from {{ wordbank.city }} to {{ wordbank.city }} taking into account {{ wordbank.stopping_points }}.
 When was {{ wordbank.book }} published?
 Get today's opening and closing stock price for {{ wordbank.company }}.
-Find a trustworthy pet sitter in my area.
+Find a trustworthy pet sitter in {{ wordbank.city }}.
 Get a list of upcoming events at {{ wordbank.venue }}.
 Look up symptoms for {{ wordbank.medical_condition }} and possible treatments.
-Find a dentist nearby and book an appointment.
+Find a dentist in {{ wordbank.city }} and book an appointment.
 Check the price history for a specific product on {{ wordbank.shopping_site }}.
 Search for a reliable car mechanic in {{ wordbank.city }} specializing in {{ wordbank.car_make }}.
 Find out the current traffic conditions in {{ wordbank.city }}.
-Book an appointment for a hair cut at a salon near me.
-Find the most reliable cloud service provider.
+Book an appointment for a hair cut at a salon near {{ wordbank.city }}.
+# Find the most reliable cloud service provider.
 Get a list of streaming services that have the TV show {{ wordbank.tv_show }}.
 Find a running route in {{ wordbank.city }} that is {{ wordbank.distance }} miles.
 Get a list of recommended SUVs under ${{ wordbank.price }}$.
 Check the pollen count in {{ wordbank.location }} today.
 Find the most convenient flight from {{ wordbank.home_city }} to {{ wordbank.destination }} on {{ wordbank.dates }} and book it.
-Calculate the exchange rate from Canadian dollars to US dollars.
+Calculate the exchange rate from {{ wordbank.foreign_currency }} to US dollars.
 Find a list of affordable hotels in {{ wordbank.city }} with pools.
 Check the IMDB rating for {{ wordbank.movie }} and read a summary.
 Find out how to recycle used {{ wordbank.electronics }} properly.
@@ -29,7 +29,7 @@ Estimate the monthly budget for a household with {{ wordbank.monthly_expenses }}
 Find out the release date for the next season of {{ wordbank.tv_show }}.
 Calculate the total distance for a hike in {{ wordbank.hiking_trail }} and the estimated time it will take.
 Find the cheapest place to buy a new {{ wordbank.electronics }} model online.
-Get a list of all the new movies releasing in theatres this week.
+Get a list of all the new movies releasing in theatres this for movie theaters in {{ wordbank.city }}.
 Find a reliable contractor to build a deck in my backyard in {{ wordbank.city }} and obtain a quote.
 Learn about the history of {{ wordbank.place }} and the best time to visit.
 Find a vet near me and book an appointment for my {{ wordbank.pet_type }}
@@ -40,11 +40,11 @@ Look up symptoms of {{ wordbank.health_condition }} and possible home remedies.
 Find a list of good restaurants in {{ wordbank.city }} that deliver.
 Check the weather in {{ wordbank.location }} tomorrow.
 Calculate how much I can save by spending {{ wordbank.money }} less each month.
-Find a photographer in my area and obtain pricing for a family photo shoot.
-Estimate the value of my home based on similar properties in my area.
+Find a photographer in {{ wordbank.city }} and obtain pricing for a family photo shoot.
+Estimate the value of my home based on similar properties using {{ wordbank.real_estate_marketplace }}.
 Find the most reliable contractor to paint my house in {{ wordbank.city }}.
 Look up reviews for a specific model of {{ wordbank.car }}
-Find out the stock availability for a specific product at a local store.
+Find out the stock availability for a specific product at a local {{ wordbank.hardware_store }}.
 Find a list of hiking trails that are dog-friendly in {{ wordbank.state }}.
 Look up the driving directions from {{ wordbank.location1 }} to {{ wordbank.location2 }}.
 Find a list of recommended hotels in {{ wordbank.city }} with free parking.

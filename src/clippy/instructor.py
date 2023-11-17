@@ -2,14 +2,15 @@ import asyncio
 import json
 from typing import List, Optional
 
-from clippy import logger
-from playwright.async_api import Locator, Page
+from playwright.async_api import Locator
 
-from clippy.controllers.apis.cohere_controller import CohereController, Responses
-from clippy.controllers.apis.cohere_controller_utils import Generation, Generations
+from clippy import logger
+from clippy.controllers import Controller, Responses, Generations
 from clippy.crawler.parser.dom_snapshot import get_action_type
-from clippy.states import NextAction
+from clippy.states import Actions, NextAction
 from clippy.stubs.stubs import StubTemplates
+
+action_str_list = Actions.actions_for_templates()
 
 
 def match_generated_output(text: str, elements: List[str]) -> Optional[int]:
@@ -24,7 +25,7 @@ class Instructor:
         self.use_async = use_async
         self.use_llm = use_llm
 
-        self.lm_controller = CohereController()
+        self.lm_controller = Controller.Clients.Cohere()
 
     async def __aenter__(self):
         return self
@@ -46,6 +47,7 @@ class Instructor:
         title: str,
         url: str,
         previous_commands: List[str] = None,
+        action_str_list: List[str] = action_str_list,
         max_tokens: int = 150,
         num_generations: int = 1,
         return_likelihoods: str = "GENERATION",
@@ -58,6 +60,7 @@ class Instructor:
             url=url,
             browser_content=elements,
             previous_commands=previous_commands,
+            action_str_list=action_str_list,
         )
 
         response: Generations = await self.lm_controller.generate(
@@ -100,7 +103,7 @@ class Instructor:
                 element_prefix="- ",
                 footer_prompt="Filtered Browser Content:\n",
             )
-            logger.info("making filter request...")
+            logger.info(f"making filter request for url: {url[:20]}...")
 
             response: Generations = await self.lm_controller.generate(
                 prompt=prompt,
@@ -176,6 +179,7 @@ class Instructor:
         url: str,
         previous_commands: List[str] = None,
         locators: List[Locator] = [],
+        action_str_list: List[str] = action_str_list,
     ) -> List[NextAction]:
         """Scores all page elements against the current objective.
 
@@ -199,7 +203,9 @@ class Instructor:
         async def score_element(element: str, index: int) -> NextAction:
             action_type = get_action_type(element)
             next_command = f"{action_type} - {element}"
-            prompt = StubTemplates.prompt.render(state=state, next_command=next_command)
+            prompt = StubTemplates.prompt.render(
+                state=state, next_command=next_command, action_str_list=action_str_list
+            )
             score = await self.lm_controller.generate(prompt=prompt, max_tokens=0, return_likelihoods="ALL")
             action = NextAction(action=action_type, score=score[0].likelihood, action_args=element)
             if locators:

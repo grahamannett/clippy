@@ -9,8 +9,14 @@ from clippy.controllers.controller import Controller
 from clippy.controllers.utils import allow_full_response
 from clippy.dm import Database
 
-AVAILABLE_MODELS = ["command-xlarge", "xlarge"]
-DEFAULT_SPECIAL_TOKENS = {13782: ["click"], 5317: ["type"]}
+# DEFAULT_SPECIAL_TOKENS = {13782: ["click"], 5317: ["type"]}
+AVAILABLE_MODELS: List[str] = ["command", "command-nightly", "command-light", "base"]
+
+
+ClientTypes: Dict[str, Callable] = {
+    "async": cohere.AsyncClient,
+    "sync": cohere.Client,
+}
 
 
 class Responses:
@@ -30,17 +36,13 @@ class CohereController(Controller):
     # cohere config
     class config:
         truncate: str = "END"  # one of NONE|START|END
-        model: str = "command"
+        # model: str = "command"
+        model: str = AVAILABLE_MODELS[0]
         embed_model: str = "embed-english-v2.0"
 
     client: cohere.AsyncClient
     client_exception: Type[cohere.error.CohereError] = cohere.error.CohereError
     client_exception_message: str = "Cohere fucked up: {0}"
-
-    ClientCls: Dict[str, Callable] = {
-        "async": cohere.AsyncClient,
-        "sync": cohere.Client,
-    }
 
     _is_async: bool = True
 
@@ -61,7 +63,7 @@ class CohereController(Controller):
         if client_type == "sync":
             logger.warn("USING SYNC LLM Client")
 
-        ClientCls = cls.ClientCls[client_type]
+        ClientCls = ClientTypes[client_type]
         api_key = api_key or environ.get("COHERE_KEY")
         return ClientCls(api_key=api_key, check_api_key=check_api_key)
 

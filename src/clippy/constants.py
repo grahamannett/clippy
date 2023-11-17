@@ -44,6 +44,7 @@ TEMPLATES_DIR = f"{ROOT_DIR}/src/clippy/templates/"
 
 TASK_BANK_DIR = f"{ROOT_DIR}/src/taskgen/wordbank"
 LLM_TASK_BANK_DIR = f"{ROOT_DIR}/src/taskgen/llm"
+TASK_BANK_FILE = "task_bank"
 
 # DATABASE RELATED
 MIGRATION_DIR = f"{ROOT_DIR}/data/migrate"

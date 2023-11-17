@@ -94,11 +94,11 @@ class TestCapture(BaseClippyTester):
         await expect(page).to_have_url("https://news.ycombinator.com/newest")
         await clippy.end_capture()
 
-    async def test_capture_steps(self):
+    async def test_capture_suggest(self):
         clippy = self.clippy
+        clippy.headless = False
         clippy.objective = "buy bodywash on amazon"
         clippy.start_page = "https://google.com"
-        clippy.headless = False
 
         page = await clippy.start_capture(goto_start_page=True)
 
