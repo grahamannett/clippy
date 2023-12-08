@@ -14,7 +14,7 @@ To setup the labeler you need to symlink the data folder to the assets:
 
 ## How to use:
 
-![](docs/data-labeling-tool.mov)
+![](https://github.com/grahamannett/clippy/raw/main/docs/data-labeling-tool.mov)
 
 # old executor/regression test
 https://gist.github.com/grahamannett/8f4194883dd13f4ccfcc1baf0975eb10
