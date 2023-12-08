@@ -1,7 +1,7 @@
 import asyncio
 from dataclasses import asdict
 from pathlib import Path
-from typing import Dict, Literal, List
+from typing import Dict, Literal, List, TypeAlias
 
 from playwright.async_api import Page
 
@@ -13,6 +13,8 @@ from clippy.utils import _device_ratio_check, _get_environ_var, _get_input, _ran
 
 RANDOM_WORD_MATCH = constants.RANDOM_WORD_MATCH
 DEFAULT_OBJECTIVE = constants.default_objective
+
+TaskGenFromTypes: TypeAlias = Literal["llm", "taskbank"]
 
 
 class ClippyBase:
@@ -37,7 +39,7 @@ class ClippyBase:
         data_manager_path: str = f"{constants.ROOT_DIR}/data/tasks",
         database_path: str = f"{constants.ROOT_DIR}/data/db/db.json",
         seed: int | None = None,
-        task_gen_from: Literal["llm", "taskbank"] = "taskbank",
+        task_gen_from: TaskGenFromTypes = "taskbank",
         **kwargs,
     ) -> None:
         """

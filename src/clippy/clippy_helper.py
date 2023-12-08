@@ -1,18 +1,15 @@
 from collections import UserDict
-from typing import List, Literal
 
-from clippy import logger
-
-from clippy import constants
+from clippy import constants, logger
 from clippy.callback import Callback
 from clippy.capture import CaptureAsync
+from clippy.clippy_base import ClippyBase, TaskGenFromTypes
 from clippy.crawler import Crawler
 from clippy.crawler.parser.dom_snapshot import DOMSnapshotParser, element_allowed_fn
-from clippy.dm import DataManager, TaskBankManager, LLMTaskGenerator
+from clippy.dm import DataManager, LLMTaskGenerator, TaskBankManager
 from clippy.instructor import Instructor, NextAction
 from clippy.states import Action, Task
 from clippy.utils import _get_input
-from clippy.clippy_base import ClippyBase
 
 
 class AsyncTasksManager(UserDict):
@@ -39,8 +36,8 @@ class Clippy(ClippyBase):
         data_dir: str = f"{constants.ROOT_DIR}/data/",
         data_manager_path: str = f"{constants.ROOT_DIR}/data/tasks",
         database_path: str = f"{constants.ROOT_DIR}/data/db/db.json",
-        seed: int | None = None,
-        task_gen_from: Literal["llm", "taskbank"] = "taskbank",
+        seed: int = None,
+        task_gen_from: TaskGenFromTypes = "taskbank",
         **kwargs,
     ) -> None:
         super().__init__(
@@ -199,7 +196,7 @@ class Clippy(ClippyBase):
         return elements
 
     async def suggest_action(
-        self, num_elems: int = 100, previous_commands: List[str] = [], filter_elements: bool = True
+        self, num_elems: int = 100, previous_commands: list[str] = [], filter_elements: bool = True
     ) -> NextAction:
         suffix_map = {"link": "page"}
         previous_commands = self._get_previous_commands(previous_commands)

@@ -34,7 +34,7 @@ def new_task():
             ),
         ),
         rx.vstack(
-            rx.hstack(rx.text("New Task Page:"), rx.text(TrajState.task.objective)), rx.spacer(), running_new_task()
+            rx.hstack(rx.text("generated task:"), rx.text(TrajState.task.objective)), rx.spacer(), running_new_task()
         ),
         rx.box(sidebar(), position="absolute", right="0px"),
         grid_template_columns="1fr 2fr 1fr",

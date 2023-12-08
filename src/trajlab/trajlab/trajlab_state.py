@@ -1,29 +1,25 @@
 import os
-import asyncio
 import shutil
 import tarfile
 from datetime import datetime
-from functools import lru_cache
 from pathlib import Path
-from typing import Dict, List, Tuple, NamedTuple, TypedDict
+from typing import Dict, List, Tuple
 
 import reflex as rx
 from loguru import logger
+from PIL import Image
+from rxconfig import config
 
-from clippy.run import Clippy
-from clippy.states import Task
 from clippy.constants import ROOT_DIR, TASKS_DATA_DIR
 from clippy.instructor import NextAction
-
+from clippy.run import Clippy
+from clippy.states import Task
 from trajlab.approval_status import ApprovalStatus  # ApprovalStatusHelper
-from trajlab.constants import image_assets, image_type, len_long, len_short, sort_options, tasks_dir
 from trajlab.db_interface import db_interface
+from trajlab.trajlab_constants import image_assets, image_type, len_long, len_short, sort_options, tasks_dir
 from trajlab.utils.file_utils import get_task_file_path, get_tasks, load_task_json_file, truncate_string
 
-from PIL import Image
 
-
-# @lru_cache(maxsize=128)
 def cache_get_tasks(tasks_dir: str = tasks_dir) -> List[str]:
     """
     This function uses a cache to store the results of the get_tasks function.
@@ -199,7 +195,7 @@ class TrajState(rx.State):
         MenuState.show_task_extra = True
         folder_id = self.get_query_params().get("task_id", "no task id")
         logger.info(f"checking if loaded for task_id: {folder_id}")
-        self.load_task(folder_id=folder_id)
+        return self.load_task(folder_id=folder_id)
 
     def reset_task(self):
         self.task = TaskInfo()
@@ -209,9 +205,19 @@ class TrajState(rx.State):
         self.on_load_new_task()
         return self.goto_page("/newtask")
 
+    def _make_clippy(self) -> None:
+        # HERE IS WHERE WE SHOULD SET ALL THE ARGS FOR CLIPPY FROM THE CONFIG
+        # THEY MUST BE SET VIA ENV VARS AS CANNOT PASS ARGS TO reflex
+        clippy_kwargs = {
+            "task_gen_from": config.task_gen_from,
+        }
+
+        logger.info(f"init clippy with kwargs: {clippy_kwargs}")
+        self._clippy = Clippy(**clippy_kwargs)
+
     def check_for_clippy(self) -> None:
         if not self._clippy:
-            self._clippy = Clippy()
+            self._make_clippy()
 
     def on_load_new_task(self) -> None:
         self.check_for_clippy()
@@ -225,7 +231,16 @@ class TrajState(rx.State):
 
     def load_task(self, folder_id: str):
         task_full_path = get_task_file_path(tasks_dir=Path(tasks_dir), task_id=folder_id)
+
+        if not Path(task_full_path).exists():
+            logger.warning(f"task file does not exist: {task_full_path}")
+            yield rx.redirect("/")
+
         json_data = cache_load_task_json_file(filepath=task_full_path)
+
+        # do this so the actions are cleaned up - NEED TO MOVE AWAY FROM JSON DICT TO USING THIS
+        json_data = Task.from_dict(json_data).cleanup().dump()
+
         self.task = TaskInfo(
             id=json_data["id"],
             short_id=json_data["id"][:len_short],
@@ -274,7 +289,7 @@ class TrajState(rx.State):
                         )
                     )
                 else:
-                    print("DIDNT FIND ACTION_TYPE")
+                    logger.debug("DIDNT FIND ACTION_TYPE")
 
             self.task_steps.append(step_state)
             self.task_step_images.append(Image.open(f"{ROOT_DIR}/data/tasks/{folder_id}/{step['id']}.{image_type}"))

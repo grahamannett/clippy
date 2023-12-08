@@ -2,7 +2,7 @@ import reflex as rx
 
 from trajlab.components.common import task_button
 from trajlab.components.sidebar import sidebar
-from trajlab.constants import sort_options, default_sort_by
+from trajlab.trajlab_constants import sort_options, default_sort_by
 from trajlab.trajlab_state import TrajState
 
 

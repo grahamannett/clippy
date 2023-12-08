@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from typing import List
 
-from trajlab.constants import tasks_dir
+from trajlab.trajlab_constants import tasks_dir
 
 
 def truncate_string(input_str: str, max_length: int, suffix_str: str = "...") -> str:
@@ -35,7 +35,7 @@ def load_task_json_file(filepath: str = None, id: str = None, get_path_func=None
     :param get_path_func: The function used to get the file path from the ID.
     :return: The loaded data as a dictionary.
     """
-    if filepath is None and id is not None and get_path_func is not None:
+    if (filepath is None) and (id is not None) and (get_path_func is not None):
         filepath = get_path_func(id)
 
     if isinstance(filepath, Path):
