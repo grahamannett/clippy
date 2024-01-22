@@ -3,24 +3,24 @@ import shutil
 import tarfile
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple
 
 import reflex as rx
-from loguru import logger
 from PIL import Image
 from rxconfig import config
 
+from clippy import logger
 from clippy.constants import ROOT_DIR, TASKS_DATA_DIR
 from clippy.instructor import NextAction
 from clippy.run import Clippy
 from clippy.states import Task
 from trajlab.approval_status import ApprovalStatus  # ApprovalStatusHelper
 from trajlab.db_interface import db_interface
-from trajlab.trajlab_constants import image_assets, image_type, len_long, len_short, sort_options, tasks_dir
+from trajlab.trajlab_constants import IMAGE_ASSETS, IMAGE_EXT, LEN_LONG, LEN_SHORT, TASKS_DIR
 from trajlab.utils.file_utils import get_task_file_path, get_tasks, load_task_json_file, truncate_string
 
 
-def cache_get_tasks(tasks_dir: str = tasks_dir) -> List[str]:
+def cache_get_tasks(tasks_dir: str = TASKS_DIR) -> list[str]:
     """
     This function uses a cache to store the results of the get_tasks function.
     The cache has a maximum size of 128 entries. If the cache is full, the least recently used entry will be discarded.
@@ -63,7 +63,7 @@ class TaskDirInfo(rx.Base):
     @classmethod
     def folder_info(cls, folder: Path):
         id = folder.name
-        short_id = truncate_string(folder.name, len_short, suffix_str="")
+        short_id = truncate_string(folder.name, LEN_SHORT, suffix_str="")
         status = ApprovalStatus.get_status(folder.name)
         status_emoji = status.emoji
         # status = ApprovalStatusHelper.get_status(folder.name)
@@ -73,14 +73,28 @@ class TaskDirInfo(rx.Base):
 
 
 class TaskInfo(rx.Base):
-    id: str = None
-    short_id: str = None
+    id: str = ""  # = None
+    short_id: str = ""  # = None
 
-    timestamp: str = None
-    timestamp_short: str = None
+    timestamp: str = ""  # = None
+    timestamp_short: str = ""  # = "None"  # = "None"  # = None
 
-    objective: str = None
-    full_path: str = None
+    objective: str = ""
+    full_path: str = ""  # None
+
+    # def __init__(self, task_info: dict = None, **kwargs):
+    #     super().__init__(**kwargs)
+
+    @classmethod
+    def from_json_data(cls, json_data: dict, task_full_path: str = ""):
+        return cls(
+            id=json_data["id"],
+            short_id=json_data["id"][:LEN_SHORT],
+            timestamp=json_data["timestamp"],
+            timestamp_short=datetime.fromisoformat(json_data["timestamp"]).strftime("%m-%d %H:%M"),
+            objective=json_data["objective"],
+            full_path=task_full_path,
+        )
 
 
 class StepActionInfo(rx.Base):
@@ -92,17 +106,20 @@ class StepActionInfo(rx.Base):
 
 
 class TaskStepInfo(rx.Base):
-    step_idx: int
-    step_id: str = None
-    url: str = None
-    image_path_web: str = None
-    image_path_rel: str = None
+    step_idx: int = 0
+    step_id: str = ""
+    url: str = ""
+    image_path_web: str = ""
+    image_path_rel: str = ""
     status: ApprovalStatus = ApprovalStatus.DEFAULT
 
-    actions: List[StepActionInfo] = None
+    actions: list[StepActionInfo] = ""
 
-    short_url: str = None
-    short_id: str = None
+    short_url: str = ""
+    short_id: str = ""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
 
 class TrajState(rx.State):
@@ -112,7 +129,7 @@ class TrajState(rx.State):
     It also includes the tasks, task_list_name, toggle_show_task_value, and reload_database methods.
     """
 
-    task: TaskInfo = TaskInfo()
+    task: TaskInfo = None  # TaskInfo()
 
     show_datetime: bool = False
     sort_by: str = "id"
@@ -122,25 +139,25 @@ class TrajState(rx.State):
         "datetime": False,
     }
 
-    _tasks_files: List[Tuple[str, float]] = []  # path/id and mtime
+    _tasks_files: list[Tuple[str, float]] = []  # path/id and mtime
     _clippy: Clippy = None
     clippy_running: bool = False
 
-    task_dirs: List[TaskDirInfo] = []
+    task_dirs: list[TaskDirInfo] = []
     current_in_task_dirs: bool = False
     # TASK----
-    task_steps: List[TaskStepInfo] = []
+    task_steps: list[TaskStepInfo] = []
     task_step_images: list[Image.Image] = []
 
     # RUNNING TASK
-    running_url: str = None
-    running_actions: List[str] = []
+    running_url: str = "None"
+    running_actions: list[str] = []
 
     # @rx.var
     # def list_task
 
     @rx.var
-    def list_task_dirs(self) -> List[TaskDirInfo]:
+    def list_task_dirs(self) -> list[TaskDirInfo]:
         return sorted(
             self.task_dirs, key=lambda v: getattr(v, self.sort_by), reverse=self.sort_direction == "descending"
         )
@@ -230,7 +247,7 @@ class TrajState(rx.State):
             logger.info(f"made new task with objective: {self.task.objective}")
 
     def load_task(self, folder_id: str):
-        task_full_path = get_task_file_path(tasks_dir=Path(tasks_dir), task_id=folder_id)
+        task_full_path = get_task_file_path(tasks_dir=Path(TASKS_DIR), task_id=folder_id)
 
         if not Path(task_full_path).exists():
             logger.warning(f"task file does not exist: {task_full_path}")
@@ -241,14 +258,15 @@ class TrajState(rx.State):
         # do this so the actions are cleaned up - NEED TO MOVE AWAY FROM JSON DICT TO USING THIS
         json_data = Task.from_dict(json_data).cleanup().dump()
 
-        self.task = TaskInfo(
-            id=json_data["id"],
-            short_id=json_data["id"][:len_short],
-            timestamp=json_data["timestamp"],
-            timestamp_short=datetime.fromisoformat(json_data["timestamp"]).strftime("%m-%d %H:%M"),
-            objective=json_data["objective"],
-            full_path=task_full_path,
-        )
+        self.task = TaskInfo.from_json_data(json_data=json_data, task_full_path=task_full_path)
+        # self.task = TaskInfo(
+        #     id=json_data["id"],
+        #     short_id=json_data["id"][:LEN_SHORT],
+        #     timestamp=json_data["timestamp"],
+        #     timestamp_short=datetime.fromisoformat(json_data["timestamp"]).strftime("%m-%d %H:%M"),
+        #     objective=json_data["objective"],
+        #     full_path=task_full_path,
+        # )
 
         self.task_steps = []
         self.task_step_images = []
@@ -258,10 +276,10 @@ class TrajState(rx.State):
                 step_idx=step_idx,
                 step_id=step["id"],
                 url=step["url"],
-                short_url=truncate_string(step["url"], len_long),
-                short_id=truncate_string(step["id"], len_long),
-                image_path_web=f"{image_assets}/{self.task.id}/{step['id']}.{image_type}",
-                image_path_rel=f"{ROOT_DIR}/data/tasks/{folder_id}/{step['id']}.{image_type}",
+                short_url=truncate_string(step["url"], LEN_LONG),
+                short_id=truncate_string(step["id"], LEN_LONG),
+                image_path_web=f"{IMAGE_ASSETS}/{self.task.id}/{step['id']}.{IMAGE_EXT}",
+                image_path_rel=f"{ROOT_DIR}/data/tasks/{folder_id}/{step['id']}.{IMAGE_EXT}",
                 # status=ApprovalStatusHelper.get_status(step["id"]),
                 status=ApprovalStatus.get_status(step["id"]),
                 actions=[],
@@ -292,7 +310,7 @@ class TrajState(rx.State):
                     logger.debug("DIDNT FIND ACTION_TYPE")
 
             self.task_steps.append(step_state)
-            self.task_step_images.append(Image.open(f"{ROOT_DIR}/data/tasks/{folder_id}/{step['id']}.{image_type}"))
+            self.task_step_images.append(Image.open(f"{ROOT_DIR}/data/tasks/{folder_id}/{step['id']}.{IMAGE_EXT}"))
 
     def read_tasks(self) -> None:
         def filter_task_dir(folder: Path) -> bool:
@@ -302,7 +320,7 @@ class TrajState(rx.State):
             return True
 
         self.task_dirs = [
-            TaskDirInfo.folder_info(folder) for folder in get_tasks(tasks_dir=tasks_dir) if filter_task_dir(folder)
+            TaskDirInfo.folder_info(folder) for folder in get_tasks(tasks_dir=TASKS_DIR) if filter_task_dir(folder)
         ]
 
         logger.info(f"loaded {len(self.task_dirs)} tasks")
@@ -432,7 +450,7 @@ class TaskState(TrajState):
 
     _running_id: str = None
     _running_url: str = None
-    _running_actions: List[str] = []
+    _running_actions: list[str] = []
 
     @rx.var
     def running_url(self):

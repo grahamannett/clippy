@@ -4,7 +4,7 @@ version = "0.1.0"
 description = ""
 authors = [{ name = "graham", email = "graham.annett@gmail.com" }]
 dependencies = [
-    "reflex>=0.2.4",
+    "reflex==0.3.9",
     "openai[datalib,embeddings,wandb]>=0.27.8",
     "cohere>=4.20.2",
     "pytest-playwright>=0.4.2",
@@ -21,6 +21,7 @@ dependencies = [
     "transformers>=4.32.0",
     "sentencepiece>=0.1.99",
     "loguru>=0.7.1",
+    "huggingface-hub>=0.20.3",
 ]
 requires-python = ">=3.11"
 readme = "README.md"
@@ -32,10 +33,14 @@ build-backend = "pdm.backend"
 
 [tool.pdm.scripts]
 server = { shell = "cd src/trajlab && reflex run" }
+reinitserver = { shell = "cd src/trajlab && reflex init" }
 
 [tool.pdm.dev-dependencies]
 test = ["pytest>=7.4.1"]
 dev = ["-e file:///${PROJECT_ROOT}/src/trajlab#egg=trajlab"]
+
+[tool.pdm.resolution]
+excludes = ["uvicorn"]
 
 [tool.pytest.ini_options]
 # ignore warnings not from clippy

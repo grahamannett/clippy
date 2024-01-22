@@ -1,21 +1,23 @@
-import unittest
 import asyncio
 import shutil
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-from loguru import logger
 from playwright.async_api import expect
 
+from clippy import logger
 from clippy.run import Clippy
-
 from tests.fixtures.cohere_responses import generation_responses
+from tests.fixtures.fixture_cases import test_output_dir
+
+objective = "buy bodywash on amazon"
+start_page = "https://google.com"
 
 
 class TestMockedResponses(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        shutil.rmtree(test_task_output_dir, ignore_errors=True)
+        shutil.rmtree(test_output_dir, ignore_errors=True)
         super().setUp()
 
     @patch("src.clippy.instructor.CohereController.generate", new_callable=AsyncMock)
@@ -23,11 +25,8 @@ class TestMockedResponses(unittest.IsolatedAsyncioTestCase):
         # Define the mock response
         mock_generate.side_effect = generation_responses
 
-        objective = "buy bodywash on amazon"
-        start_page = "https://google.com"
-
         clippy = Clippy(
-            objective=objective, headless=True, start_page=start_page, data_dir=test_task_output_dir, key_exit=False
+            objective=objective, headless=True, start_page=start_page, data_dir=test_output_dir, key_exit=False
         )
 
         await clippy.start_capture(goto_start_page=True)
@@ -61,7 +60,7 @@ class TestMockedResponses(unittest.IsolatedAsyncioTestCase):
             objective=objective,
             headless=True,
             start_page=start_page,
-            data_dir=test_task_output_dir,
+            data_dir=test_output_dir,
             key_exit=False,
         )
         # clippy.headless = True

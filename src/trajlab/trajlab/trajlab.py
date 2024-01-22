@@ -20,4 +20,3 @@ app.add_page(
     on_load=[TrajState.on_load_task, MenuState.set_show_task_extra(False)],
 )
 app.add_page(new_task, route="newtask", on_load=TrajState.on_load_new_task)
-app.compile()

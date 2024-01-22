@@ -1,11 +1,11 @@
-len_short = 8
-len_long = 50
+LEN_SHORT = 8
+LEN_LONG = 50
 
-tasks_dir = "assets/data/tasks"
-image_assets = "/data/tasks"
+TASKS_DIR = "assets/data/tasks"
+IMAGE_ASSETS = "/data/tasks"
 
-image_type = "png"
+IMAGE_EXT = "png"
 
 # sorting options for index and sidebar
-sort_options = ["id", "status", "timestamp"]
-default_sort_by = sort_options[0]
+SORT_OPTIONS = ["id", "status", "timestamp"]
+DEFAULT_SORT_BY = SORT_OPTIONS[0]

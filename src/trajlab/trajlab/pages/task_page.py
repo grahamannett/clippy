@@ -105,8 +105,7 @@ def task_header_card() -> rx.Component:
                 delete_task_button(),
             ),
         ),
-        header=rx.heading(TrajState.task.objective),
-        width="130%",
+        header=rx.heading(TrajState.task.objective, size="lg"),
     )
 
 
@@ -165,7 +164,7 @@ def task_step(step: TaskStepInfo) -> rx.Component:
                     )
                 ),
                 rx.hstack(
-                    rx.link(rx.button("Goto page", variant="outline", size="small"), color="darkblue", href=step.url),
+                    rx.link(rx.button("Goto page", variant="outline", size="sm"), color="darkblue", href=step.url),
                     rx.spacer(),
                     rx.link(
                         rx.button("Launch Clippy Here", variant="outline", is_disabled=True, size="sm"),
@@ -187,7 +186,10 @@ def task_page() -> rx.Component:
             sidebar(task_sidebar_extra()),
             rx.center(
                 rx.vstack(
-                    task_header_card(),
+                    rx.box(
+                        task_header_card(),
+                        width="75%",
+                    ),
                     rx.container(
                         rx.responsive_grid(
                             rx.foreach(

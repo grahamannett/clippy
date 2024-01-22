@@ -1,9 +1,7 @@
 import asyncio
 import time
 from functools import partial, wraps
-from typing import Callable, Coroutine, Awaitable
-
-from loguru import logger
+from typing import Awaitable, Callable, Coroutine
 
 
 def run_async_func(func: Coroutine):

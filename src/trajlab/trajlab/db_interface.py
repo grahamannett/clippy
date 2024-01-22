@@ -1,9 +1,6 @@
 import os
-from functools import lru_cache
-from typing import List
 
-from loguru import logger
-
+from clippy import logger
 from clippy.constants import ROOT_DIR
 from clippy.dm.db_utils import Database
 
@@ -32,7 +29,7 @@ class DatabaseInterface:
         DatabaseInterface._database.drop_table("approved")
         logger.info("dropped approved table")
 
-    def update_id_status(self, obj_id: str, value: str) -> List[int]:
+    def update_id_status(self, obj_id: str, value: str) -> list[int]:
         logger.info(f"updating id: {obj_id} to {value}")
         doc_id = self.db_table_id_status.upsert({"id": obj_id, "status": value}, self.db_query.id == obj_id)
         return doc_id

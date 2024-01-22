@@ -75,6 +75,10 @@ class CaptureAsync(Capture):
     async def hook_update_task_new_page(self, page: Page):
         await self.task.page_change_async(page=page)
 
+    async def hook_capture_html(self, page: Page):
+        dom = page.inner_html()
+        logger.info(f"got inner html for {dom}")
+
     async def hook_capture_screenshot(self, page: Page):
         self.async_tasks["screenshot_event"].clear()
         self.captured_screenshot_urls.append(page.url)

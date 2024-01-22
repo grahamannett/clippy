@@ -2,7 +2,7 @@ import reflex as rx
 
 from trajlab.components.common import task_button
 from trajlab.components.sidebar import sidebar
-from trajlab.trajlab_constants import sort_options, default_sort_by
+from trajlab.trajlab_constants import SORT_OPTIONS, DEFAULT_SORT_BY
 from trajlab.trajlab_state import TrajState
 
 
@@ -37,7 +37,7 @@ def index_extra_sidebar() -> rx.Component:
         rx.container(
             rx.hstack(
                 rx.heading("Sort By", size="sm"),
-                rx.select(sort_options, default_value=default_sort_by, on_change=TrajState.set_sort_by),
+                rx.select(SORT_OPTIONS, default_value=DEFAULT_SORT_BY, on_change=TrajState.set_sort_by),
                 rx.select(
                     ["ascending", "descending"],
                     default_value="Ascending",
