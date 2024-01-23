@@ -46,8 +46,9 @@ class TestMockedResponses(unittest.IsolatedAsyncioTestCase):
         response_idx = 0
         responses = []
         while True:
-            if Path(f"test_output/cohere_responses/{response_idx}.pt").exists():
-                responses.append(torch.load(f"test_output/cohere_responses/{response_idx}.pt"))
+            response_data_file = f"tests/fixtures/cohere_responses_data/{response_idx}.pt"
+            if Path(response_data_file).exists():
+                responses.append(torch.load(response_data_file))
                 response_idx += 1
             else:
                 break

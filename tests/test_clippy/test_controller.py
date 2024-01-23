@@ -1,14 +1,13 @@
-import unittest
 import json
-import torch
+import unittest
 
-from clippy.stubs import StubTemplates
+import torch
+from cohere.responses.generation import Generation, Generations, TokenLikelihood
+
 from clippy.controllers import Controller
 from clippy.controllers.apis.cohere_controller_utils import CohereJSONEncoder
 from clippy.controllers.controller_config import ResponseConfig
-
-from cohere.responses.generation import Generation, Generations, TokenLikelihood
-
+from clippy.stubs import StubTemplates
 
 elements = [
     "button 1 hnname",
@@ -77,8 +76,9 @@ class TestController(unittest.IsolatedAsyncioTestCase):
 
 class TestCohere(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        self.response_generate_pt = "test_output/cohere_responses/test_generate.pt"
-        self.response_embed_pt = "test_output/cohere_responses/test_embed.pt"
+        cohere_data_dir = "tests/fixtures/cohere_responses_data"
+        self.response_generate_pt = f"{cohere_data_dir}/types/test_generate.pt"
+        self.response_embed_pt = f"{cohere_data_dir}/types/test_embed.pt"
 
     async def test_generate(self):
         co = Controller.Clients.Cohere()

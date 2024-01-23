@@ -2,7 +2,20 @@ import json
 from pathlib import Path
 from typing import List
 
-from trajlab.trajlab_constants import tasks_dir
+from trajlab.trajlab_constants import TASKS_DIR
+
+
+def _as_path(path: str | Path) -> Path:
+    """
+    Convert a string to a Path object.
+
+    :param path: The path to convert.
+    :return: The converted path.
+    """
+    if isinstance(path, str):
+        path = Path(path)
+
+    return path
 
 
 def truncate_string(input_str: str, max_length: int, suffix_str: str = "...") -> str:
@@ -16,14 +29,14 @@ def truncate_string(input_str: str, max_length: int, suffix_str: str = "...") ->
     return f"{input_str[:max_length]}{suffix_str}" if len(input_str) > max_length else input_str
 
 
-def get_tasks(tasks_dir: str = tasks_dir) -> List[Path]:
+def get_tasks(tasks_dir: str = TASKS_DIR) -> List[Path]:
     """
     Get a list of task directories from a specified directory.
 
     :param tasks_dir: The directory where the tasks are stored.
     :return: A list of task directory names.
     """
-    return [f for f in Path(tasks_dir).iterdir() if f.is_dir()]
+    return [f for f in _as_path(tasks_dir).iterdir() if f.is_dir()]
 
 
 def load_task_json_file(filepath: str = None, id: str = None, get_path_func=None) -> dict:
@@ -47,7 +60,7 @@ def load_task_json_file(filepath: str = None, id: str = None, get_path_func=None
     return data
 
 
-def get_task_file_path(task_id: str, tasks_dir: str | Path = tasks_dir, filename: str = "task.json") -> str:
+def get_task_file_path(task_id: str, tasks_dir: str | Path = TASKS_DIR, filename: str = "task.json") -> str:
     """
     Get the full path of a file using an ID.
 
@@ -56,8 +69,6 @@ def get_task_file_path(task_id: str, tasks_dir: str | Path = tasks_dir, filename
     :param filename: The name of the file.
     :return: The full path of the file.
     """
-    if isinstance(tasks_dir, str):
-        tasks_dir = Path(tasks_dir)
 
-    filepath = tasks_dir / task_id / filename
+    filepath = _as_path(tasks_dir) / task_id / filename
     return str(filepath.resolve())

@@ -1,13 +1,12 @@
 import asyncio
-from typing import Any, Dict, List, Optional, Tuple, Protocol
-
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Dict, List, Protocol, Tuple
 
 import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
 
 from clippy.states import Task
 from clippy.stubs.stubs import StubHelper, StubTemplates, Template
+from common.math_utils import cosine_similarity
 
 
 def _full_response(data: Any, obj: Any):
@@ -45,7 +44,6 @@ class Controller:
     client: ClientProtocol
     client_exception: Exception = None
     client_exception_message: str = None
-
 
     def __new__(cls, *args, **kwargs):
         if cls._sync_singleton is False:
@@ -103,7 +101,7 @@ class Controller:
         embeddings = embedding_resp.embeddings
 
         # Calculate cosine similarity scores
-        scores = cosine_similarity([embeddings[0]], embeddings[1:]).flatten()
+        scores = cosine_similarity(embeddings[0], embeddings[1:]).flatten()
 
         # Find the most similar objective
         most_similar_index = np.argmax(scores)
