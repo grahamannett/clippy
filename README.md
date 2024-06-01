@@ -16,10 +16,14 @@ To setup the labeler you need to symlink the data folder to the assets:
 
 https://github.com/grahamannett/clippy/assets/7343667/5c904fb5-1fd8-43fa-9085-63e08271a993
 
+# Outline Of Proposed System
+
+
 
 # old executor/regression test
 https://gist.github.com/grahamannett/8f4194883dd13f4ccfcc1baf0975eb10
 
+![clippy-outline](https://github.com/grahamannett/clippy/assets/7343667/f10c9a51-6158-4cee-9bf2-c2696003b6b3)
 
 
 # Templating Notes:
