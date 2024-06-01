@@ -15,8 +15,8 @@ from clippy.states.states import Task
 
 class TestDatabase(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        self.task_data_dir = "test_output/tasks/"
-        self.database_path = "test_output/test_data.json"
+        self.task_data_dir = "tests/fixtures/data_fixtures/tasks/"
+        self.database_path = "tests/fixtures/data_fixtures/test_data.json"
         if os.path.exists(self.database_path):
             os.remove(self.database_path)
 
