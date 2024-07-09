@@ -17,7 +17,7 @@ class LogLevel(StrEnum):
     ERROR = auto()
     CRITICAL = auto()
 
-    def __le__(self, other: LogLevel) -> bool:
+    def __le__(self, other: "LogLevel") -> bool:
         """Compare log levels.
 
         Args:
@@ -119,7 +119,9 @@ def warn(msg: str, _stack_offset: int = 3, **kwargs):
         kwargs: Keyword arguments to pass to the print function.
     """
     if LEVEL <= LogLevel.WARNING:
-        print(f"[orange1]Warning: {msg}[/orange1]", _stack_offset=_stack_offset, **kwargs)
+        print(
+            f"[orange1]Warning: {msg}[/orange1]", _stack_offset=_stack_offset, **kwargs
+        )
 
 
 def deprecate(
@@ -157,7 +159,11 @@ def error(msg: str, _stack_offset: int = 3, **kwargs):
         print(f"[red]{msg}[/red]", _stack_offset=_stack_offset, **kwargs)
 
 
-def ask(question: str, choices: Optional[List[str]] = None, default: Optional[str] = None) -> str:
+def ask(
+    question: str,
+    choices: Optional[List[str]] = None,
+    default: Optional[str] = None,
+) -> str:
     """Takes a prompt question and optionally a list of choices
      and returns the user input.
 

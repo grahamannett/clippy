@@ -1,5 +1,5 @@
 import asyncio
-from dataclasses import asdict
+from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Dict, Literal, List, TypeAlias
 
@@ -8,7 +8,12 @@ from playwright.async_api import Page
 from clippy import constants, logger
 from clippy.states import Action, Task
 from clippy.states.actions import NextAction
-from clippy.utils import _device_ratio_check, _get_environ_var, _get_input, _random_delay
+from clippy.utils import (
+    _device_ratio_check,
+    _get_environ_var,
+    _get_input,
+    _random_delay,
+)
 
 
 RANDOM_WORD_MATCH = constants.RANDOM_WORD_MATCH
@@ -75,7 +80,9 @@ class ClippyBase:
 
         self.clear_step_states = clear_step_states
         self.data_dir = Path(data_dir)
-        self.data_manager_path = Path(data_manager_path)  # data manager handles tasks/steps/dataclasses
+        self.data_manager_path = Path(
+            data_manager_path
+        )  # data manager handles tasks/steps/dataclasses
         self.database_path = Path(database_path)  # database handles json storage
 
         self.task_generators_avail: dict[str, callable] = {}
@@ -101,9 +108,14 @@ class ClippyBase:
 
     def _make_cmd_kwargs(self, run_kwargs: dict) -> tuple[str, dict]:
         cmd = run_kwargs.pop("cmd")
+
         cmd_kwargs = {
             **run_kwargs,
-            **asdict(run_kwargs.pop("command")),
+            **(
+                asdict(run_kwargs.pop("command"))
+                if is_dataclass(run_kwargs["command"])
+                else run_kwargs
+            ),
         }
 
         return cmd, cmd_kwargs
@@ -144,7 +156,9 @@ class ClippyBase:
                     raise Exception("action is not an Action")
 
                 # last_cmd = f"{action.__class__.__name__}"
-                last_cmd = action.format_for_llm(element_id=_match_cmd_with_used_actions(action))
+                last_cmd = action.format_for_llm(
+                    element_id=_match_cmd_with_used_actions(action)
+                )
 
                 # gen_action = self.used_next_actions[next_action_idx]
                 # last_cmd = f"{action.__class__.__name__} {gen_action.element_id}"
@@ -171,7 +185,9 @@ class ClippyBase:
                 raise NotImplementedError("task_id from int not implemented")
             # self.objective = self.tbm.sample(task_id)
             self.objective = self._get_random_task()
-            logger.info(f"Sampled TASK from[{self.task_gen_from}]\nTASK: {self.objective} ")
+            logger.info(
+                f"Sampled TASK from[{self.task_gen_from}]\nTASK: {self.objective} "
+            )
 
         if self.objective is DEFAULT_OBJECTIVE:
             logger.info("Default objective is used. Need user response.")
@@ -182,7 +198,9 @@ class ClippyBase:
                 self.objective = self._get_random_task()
                 logger.info(f"Sampled task: {self.objective}")
 
-    async def wait_until(self, message: str = None, timeout: float = 1.0, **kwargs) -> None:
+    async def wait_until(
+        self, message: str = None, timeout: float = 1.0, **kwargs
+    ) -> None:
         # Ive tried a lot of things besides just sleeping but the order of stuff happening is not consistent
         # there is probably a better way to do this using async but would require knowing exactly what is happening
         event = self.async_tasks.get(message, None)
