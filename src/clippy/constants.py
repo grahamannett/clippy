@@ -11,7 +11,7 @@ default_empty_injection_script = f"{ROOT_DIR}/src/clippy/crawler/inject/empty.js
 
 # clippy defaults
 default_start_page: str = "https://www.google.com"
-default_objective: str = "Enter an objective: "
+default_objective: str = "Enter an objective: " 
 
 
 max_url_length = 100  # if None will print whole

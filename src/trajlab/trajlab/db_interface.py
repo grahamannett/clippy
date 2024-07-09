@@ -4,6 +4,8 @@ from clippy import logger
 from clippy.constants import ROOT_DIR
 from clippy.dm.db_utils import Database
 
+from trajlab.state import TaskState
+
 
 class DatabaseInterface:
     """
@@ -31,7 +33,9 @@ class DatabaseInterface:
 
     def update_id_status(self, obj_id: str, value: str) -> list[int]:
         logger.info(f"updating id: {obj_id} to {value}")
-        doc_id = self.db_table_id_status.upsert({"id": obj_id, "status": value}, self.db_query.id == obj_id)
+        doc_id = self.db_table_id_status.upsert(
+            {"id": obj_id, "status": value}, self.db_query.id == obj_id
+        )
         return doc_id
 
     def get_approval_status(self, obj_id: str) -> str:
@@ -46,7 +50,6 @@ class DatabaseInterface:
     @classmethod
     def check_db(cls, *args, **kwargs) -> None:
         # prevent circular import
-        from trajlab.state import TaskState
 
         logger.info(f"checking db... with current task {TaskState.task_id}")
         return None

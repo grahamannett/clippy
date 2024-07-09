@@ -16,8 +16,19 @@ from clippy.run import Clippy
 from clippy.states import Task
 from trajlab.approval_status import ApprovalStatus  # ApprovalStatusHelper
 from trajlab.db_interface import db_interface
-from trajlab.trajlab_constants import IMAGE_ASSETS, IMAGE_EXT, LEN_LONG, LEN_SHORT, TASKS_DIR
-from trajlab.utils.file_utils import get_task_file_path, get_tasks, load_task_json_file, truncate_string
+from trajlab.trajlab_constants import (
+    IMAGE_ASSETS,
+    IMAGE_EXT,
+    LEN_LONG,
+    LEN_SHORT,
+    TASKS_DIR,
+)
+from trajlab.utils.file_utils import (
+    get_task_file_path,
+    get_tasks,
+    load_task_json_file,
+    truncate_string,
+)
 
 
 def cache_get_tasks(tasks_dir: str = TASKS_DIR) -> list[str]:
@@ -30,7 +41,9 @@ def cache_get_tasks(tasks_dir: str = TASKS_DIR) -> list[str]:
 
 
 # @lru_cache(maxsize=128)
-def cache_load_task_json_file(filepath: str = None, id: str = None, get_path_func=None) -> dict:
+def cache_load_task_json_file(
+    filepath: str = None, id: str = None, get_path_func=None
+) -> dict:
     """
     This function uses a cache to store the results of the load_task_json_file function.
     The cache has a maximum size of 128 entries. If the cache is full, the least recently used entry will be discarded.
@@ -68,8 +81,16 @@ class TaskDirInfo(rx.Base):
         status_emoji = status.emoji
         # status = ApprovalStatusHelper.get_status(folder.name)
         # status_emoji = ApprovalStatusHelper.get_emoji(status)
-        timestamp = datetime.fromtimestamp(folder.stat().st_mtime).strftime("%m-%d %H:%M")
-        return cls(id=id, short_id=short_id, status=status, status_emoji=status_emoji, timestamp=timestamp)
+        timestamp = datetime.fromtimestamp(folder.stat().st_mtime).strftime(
+            "%m-%d %H:%M"
+        )
+        return cls(
+            id=id,
+            short_id=short_id,
+            status=status,
+            status_emoji=status_emoji,
+            timestamp=timestamp,
+        )
 
 
 class TaskInfo(rx.Base):
@@ -91,7 +112,9 @@ class TaskInfo(rx.Base):
             id=json_data["id"],
             short_id=json_data["id"][:LEN_SHORT],
             timestamp=json_data["timestamp"],
-            timestamp_short=datetime.fromisoformat(json_data["timestamp"]).strftime("%m-%d %H:%M"),
+            timestamp_short=datetime.fromisoformat(json_data["timestamp"]).strftime(
+                "%m-%d %H:%M"
+            ),
             objective=json_data["objective"],
             full_path=task_full_path,
         )
@@ -159,7 +182,9 @@ class TrajState(rx.State):
     @rx.var
     def list_task_dirs(self) -> list[TaskDirInfo]:
         return sorted(
-            self.task_dirs, key=lambda v: getattr(v, self.sort_by), reverse=self.sort_direction == "descending"
+            self.task_dirs,
+            key=lambda v: getattr(v, self.sort_by),
+            reverse=self.sort_direction == "descending",
         )
 
     @rx.var
@@ -247,7 +272,9 @@ class TrajState(rx.State):
             logger.info(f"made new task with objective: {self.task.objective}")
 
     def load_task(self, folder_id: str):
-        task_full_path = get_task_file_path(tasks_dir=Path(TASKS_DIR), task_id=folder_id)
+        task_full_path = get_task_file_path(
+            tasks_dir=Path(TASKS_DIR), task_id=folder_id
+        )
 
         if not Path(task_full_path).exists():
             logger.warning(f"task file does not exist: {task_full_path}")
@@ -258,16 +285,9 @@ class TrajState(rx.State):
         # do this so the actions are cleaned up - NEED TO MOVE AWAY FROM JSON DICT TO USING THIS
         json_data = Task.from_dict(json_data).cleanup().dump()
 
-        self.task = TaskInfo.from_json_data(json_data=json_data, task_full_path=task_full_path)
-        # self.task = TaskInfo(
-        #     id=json_data["id"],
-        #     short_id=json_data["id"][:LEN_SHORT],
-        #     timestamp=json_data["timestamp"],
-        #     timestamp_short=datetime.fromisoformat(json_data["timestamp"]).strftime("%m-%d %H:%M"),
-        #     objective=json_data["objective"],
-        #     full_path=task_full_path,
-        # )
-
+        self.task = TaskInfo.from_json_data(
+            json_data=json_data, task_full_path=task_full_path
+        )
         self.task_steps = []
         self.task_step_images = []
 
@@ -310,7 +330,11 @@ class TrajState(rx.State):
                     logger.debug("DIDNT FIND ACTION_TYPE")
 
             self.task_steps.append(step_state)
-            self.task_step_images.append(Image.open(f"{ROOT_DIR}/data/tasks/{folder_id}/{step['id']}.{IMAGE_EXT}"))
+            self.task_step_images.append(
+                Image.open(
+                    f"{ROOT_DIR}/data/tasks/{folder_id}/{step['id']}.{IMAGE_EXT}"
+                )
+            )
 
     def read_tasks(self) -> None:
         def filter_task_dir(folder: Path) -> bool:
@@ -320,7 +344,9 @@ class TrajState(rx.State):
             return True
 
         self.task_dirs = [
-            TaskDirInfo.folder_info(folder) for folder in get_tasks(tasks_dir=TASKS_DIR) if filter_task_dir(folder)
+            TaskDirInfo.folder_info(folder)
+            for folder in get_tasks(tasks_dir=TASKS_DIR)
+            if filter_task_dir(folder)
         ]
 
         logger.info(f"loaded {len(self.task_dirs)} tasks")
@@ -384,14 +410,13 @@ class TrajState(rx.State):
         """
         logger.info(f"should launch from this step {step_id}")
 
-    def toggle_running_new_task(self) -> None:
+    def toggle_running_new_task(self):
         self.check_for_clippy()
         yield TrajState.clippy_run_new_task
 
-    def toggle_running_new_task_auto(self) -> None:
+    def toggle_running_new_task_auto(self):
         self.check_for_clippy()
         yield TrajState.clippy_run_new_task_auto
-
         """
         This method starts a new task in the background.
         """
@@ -406,11 +431,12 @@ class TrajState(rx.State):
                 logger.info(f"PAGE-CHANGE: {page.url} | PREVIOUS ACTIONS: {_actions}")
 
         async with self:
-            self._clippy.callback_manager.add_callback(callback=page_change_callback, on=Task.page_change_async)
+            self._clippy.callback_manager.add_callback(
+                callback=page_change_callback, on=Task.page_change_async
+            )
             self._clippy.objective = self.task.objective
             self._clippy.key_exit = False
             await self._clippy.start_capture()
-            # self.task.id = self._clippy.task.id
 
         # wait for the pause event
         await self._clippy.async_tasks["crawler_pause"]
@@ -422,7 +448,10 @@ class TrajState(rx.State):
             self._clippy.objective = self.task.objective
             self._clippy.key_exit = False
             await self._clippy.start_capture()
-            self.task.objective, self.task.id = self._clippy.task.objective, self._clippy.task.id
+            self.task.objective, self.task.id = (
+                self._clippy.task.objective,
+                self._clippy.task.id,
+            )
 
         # here we are running the clippy auto task
         action: NextAction = await self._clippy.suggest_action()
