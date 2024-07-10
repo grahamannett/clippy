@@ -2,6 +2,11 @@
 
 Web Agent + Data Labeler for Web Trajectory Research Project
 
+The web app is being migrated/refactored to new repo:
+  - [web-agent-collection-offline-dataset](https://github.com/grahamannett/web-agent-collection-offline-dataset)
+
+The web crawler/agent is being migrated/refactored to a new repo as well but will eventually use this repo name.  Doing this to separate the web agent from the data labeling tool as there are two distinct use cases and the web app should be useable without the web agent integration.
+
 ## To Run
 
 These keys must be set to run:
