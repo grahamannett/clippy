@@ -6,3 +6,5 @@ Search for flight options from {{ wordbank.city }} to {{ wordbank.city }}.
 Find and book a hotel for a weekend getaway in {{ wordbank.city }}.
 Convert from {{ wordbank.number }} {{ wordbank.currency }} to {{ wordbank.currency }}.
 Look up recipes for {{ wordbank.recipe }}.
+Schedule a doctors appointment for {{ wordbank.number }} person/people on {{ wordbank.date }} in {{ wordbank.city }}.
+Check the current stock price of {{ wordbank.company }}.
