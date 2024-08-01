@@ -2,6 +2,11 @@
 // expose_binding or expose_function in python from playwright rather than transmitting data over console.log
 // console.log("CATCH: From preload.js")
 const CATCH_FLAG = "CATCH"
+const _DEBUG_FLAG = "DEBUG"
+const _FAIL_FLAG = "FAIL"
+const _INPUT_TYPE_CLICK = "Click"
+const _INPUT_TYPE_ENTER = "Enter"
+const _INPUT_TYPE_WHEEL = "Wheel"
 
 const trackInfo = {
   wheel: {
@@ -10,18 +15,16 @@ const trackInfo = {
   },
 }
 
-function _transmitData(flag, data) {
-  console.log(CATCH_FLAG, flag, JSON.stringify(data))
+function _transmitData(flag, eventData) {
+  console.log(CATCH_FLAG, flag, JSON.stringify(eventData))
 }
 
-function _fail(data) {
-  const FLAG = "FAIL"
-  _transmitData(FLAT, args)
+function _fail(eventData) {
+  _transmitData(_FAIL_FLAG, args)
 }
 
-function _debug(data) {
-  const FLAG = "DEBUG"
-  _transmitData(FLAG, data)
+function _debug(eventData) {
+  _transmitData(_DEBUG_FLAG, eventData)
 }
 
 function elemPositionDocument(el) {
@@ -55,9 +58,8 @@ function getSelector(elm) {
 }
 
 function checkIfScrolled() {
-  const INPUT_TYPE = "Wheel"
   if (window.scrollX != 0 || window.scrollY != 0) {
-    _transmitData(INPUT_TYPE, {
+    _transmitData(_INPUT_TYPE_WHEEL, {
       delta_x: window.scrollX,
       delta_y: window.scrollY,
     })
@@ -84,7 +86,6 @@ var makeTrackInput = function (INPUT_TYPE) {
 }
 
 var trackClick = function (inputEvent) {
-  const INPUT_TYPE = "Click"
   // there are like 10 different options on this inputEvent and not sure which i should use:
   // pageX,pageY, clientX, clientY, offsetX, offsetY, x, y, screenX, screenY
   const x = inputEvent.x
@@ -105,7 +106,7 @@ var trackClick = function (inputEvent) {
   }
 
   checkIfScrolled()
-  _transmitData(INPUT_TYPE, {
+  _transmitData(_INPUT_TYPE_CLICK, {
     x: x,
     y: y,
     selector: selectorVal,
@@ -115,9 +116,8 @@ var trackClick = function (inputEvent) {
 }
 
 var trackEnter = function (inputEvent) {
-  const INPUT_TYPE = "Enter"
   if (inputEvent.code === "Enter") {
-    _transmitData(INPUT_TYPE, { value: inputEvent.code })
+    _transmitData(_INPUT_TYPE_ENTER, { value: inputEvent.code })
   }
 }
 
@@ -125,16 +125,14 @@ var trackEnter = function (inputEvent) {
 // probably deltaX and deltaY but maybe should use pageX, pageY
 // dont use this, theres too many events it will probably cause issues for playwright
 var trackWheelEventAll = function (inputEvent) {
-  const INPUT_TYPE = "Wheel"
-  _transmitData(INPUT_TYPE, {
+  _transmitData(_INPUT_TYPE_WHEEL, {
     delta_x: inputEvent.deltaX,
     delta_y: inputEvent.deltaY,
   })
 }
 
-function trackWheel(data) {
-  const INPUT_TYPE = "Wheel"
-  _transmitData(INPUT_TYPE, {
+function trackWheel(eventData) {
+  _transmitData(_INPUT_TYPE_WHEEL, {
     delta_x: trackInfo.wheel.deltaX,
     delta_y: trackInfo.wheel.deltaY,
   })
