@@ -3,18 +3,22 @@
 Web Agent + Data Labeler for Web Trajectory Research Project
 
 The web app is being migrated/refactored to new repo:
-  - [web-agent-collection-offline-dataset](https://github.com/grahamannett/web-agent-collection-offline-dataset)
 
-The web crawler/agent is being migrated/refactored to a new repo as well but will eventually use this repo name.  Doing this to separate the web agent from the data labeling tool as there are two distinct use cases and the web app should be useable without the web agent integration.
+- [web-agent-collection-offline-dataset](https://github.com/grahamannett/web-agent-collection-offline-dataset)
+
+The web crawler/agent is being migrated/refactored to a new repo as well but will eventually use this repo name. Doing this to separate the web agent from the data labeling tool as there are two distinct use cases and the web app should be useable without the web agent integration.
 
 ## To Run
 
-These keys must be set to run:
-- OPENAI_API_KEY
-- COHERE_KEY
-- QDRANT_KEY
+These keys are important to set depending on what you are doing:
+
 - KEEP_DEVICE_RATIO=0
-    - necessary if you are using a mbp with non-retina screen
+  - necessary if you are using a mbp with non-retina screen. Havent looked into if this was possibly fixed in the latest versions of playwright but the x/y coords were scaled incorrectly when using an external monitor with a non-retina screen.
+- COHERE_KEY
+  - only for LLM suggestion
+- OPENAI_API_KEY
+  - only for LLM suggestion
+- QDRANT_KEY (not actually used anymore)
 
 Then to run the program:
 
@@ -63,9 +67,11 @@ For instance to run a local capture with random task generated from LLM with LLM
 ```
 
 # main app:
+
 - src/clippy
 
 # trajectory labeler:
+
 - src/trajlab
 
 To setup the labeler you need to symlink the data folder to the assets:
@@ -85,10 +91,17 @@ https://gist.github.com/grahamannett/8f4194883dd13f4ccfcc1baf0975eb10
  -->
 
 # Templating Notes:
+
 For some of the templates where there are conditionals, I have the space with the "None" option rather than with the preceding and this might not be obvious if tests fail from string comparison. For instance with the following:
 
 ```jinja
 Previous actions:{% if previous_commands %}{% for cmd in previous_commands %}
 {{ action_prefix }}{{ cmd }}{% endfor %}{% else %} None{% endif %}
 ```
-it is ` None` rather than `Previous actions: `.  Keep this formatting unless there is a good reason to switch away from it as it makes regression/testing more obvious.
+
+it is ` None` rather than `Previous actions: `. Keep this formatting unless there is a good reason to switch away from it as it makes regression/testing more obvious.
+
+# Available Dataset
+
+I intend to release the actual dataset for this, it will be linked in the [web-agent-collection-offline-dataset](https://github.com/grahamannett/web-agent-collection-offline-dataset) along with the tools for collating from the other related web datasets I have used for training multimodal models on web tasks (e.g. Mind2Web tooling, RICO/Service, etc).
+For now there is a small few examples that can be used here: [tasks-examples.zip](https://github.com/user-attachments/files/16169267/tasks-examples.zip) but a number of the trajectories on the full dataset have my personal information and I ideally do not want that to be part of everyone elses training data 😬.
